@@ -53,22 +53,15 @@ export interface LocusWalletInfo {
  * Initialize Locus payment agent with API key
  * 
  * Buyer API Key is used for making payments (investments)
- * Seller API Key is used for receiving payments (project creators)
+ * Note: Agents can only send payments, not receive them. Only wallets can receive payments.
  */
 export function initLocusAgent(config: {
   buyerApiKey?: string;
-  sellerApiKey?: string;
 }) {
-  if (!config.buyerApiKey && !config.sellerApiKey) {
-    console.warn('Locus API keys not provided, using mock mode');
-  }
-  
-  if (config.buyerApiKey) {
+  if (!config.buyerApiKey) {
+    console.warn('Locus buyer API key not provided, using mock mode');
+  } else {
     console.log('Locus buyer agent initialized');
-  }
-  
-  if (config.sellerApiKey) {
-    console.log('Locus seller agent initialized');
   }
   
   // Get MCP configuration if buyer API key is provided
@@ -76,7 +69,6 @@ export function initLocusAgent(config: {
 
   return {
     buyerApiKey: config.buyerApiKey,
-    sellerApiKey: config.sellerApiKey,
     apiBase: LOCUS_API_BASE,
     mcpUrl: LOCUS_MCP_URL,
     network: LOCUS_NETWORK,

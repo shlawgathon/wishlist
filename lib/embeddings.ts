@@ -51,7 +51,7 @@ export async function generateEmbedding(
 
 /**
  * Generate embedding for a listing
- * Combines name, description, category, and fullDescription into a single text
+ * Combines name, description, category into a single text
  * @param listing - Listing object
  * @returns Vector embedding array
  */
@@ -60,7 +60,6 @@ export async function embedListing(listing: Listing): Promise<number[]> {
   const text = [
     listing.name,
     listing.description,
-    listing.fullDescription,
     listing.category,
     listing.companyProfile?.name,
     listing.companyProfile?.bio,

@@ -150,7 +150,7 @@ export default function ProjectListing({ project: initialProject, onBack, showFu
                 <AccordionContent>
                   <ScrollArea className="h-64 w-full pr-4">
                     <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                      {project.fullDescription}
+                      {project.description || 'No description provided.'}
                     </div>
                   </ScrollArea>
                 </AccordionContent>

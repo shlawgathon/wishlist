@@ -14,7 +14,7 @@ export interface User {
   _id?: ObjectId;
   username: string;
   passwordHash: string; // Hashed password
-  buyerApiKey?: string; // Locus buyer API key
+  buyerApiKey: string; // Locus buyer API key (required)
   createdAt: number;
   updatedAt: number;
 }

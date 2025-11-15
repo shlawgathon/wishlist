@@ -53,17 +53,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine payment method and recipient
-    // Priority: wallet > agent > x402
+    // Only wallets can receive payments (agents cannot receive)
     // Note: sellerEmail is for contacting the creator, NOT for payments
-    let finalPaymentMethod: 'agent' | 'wallet' | 'x402' = 'x402';
+    let finalPaymentMethod: 'wallet' | 'x402' = 'x402';
     let finalRecipient: string = '';
 
     // If payment method and recipient are provided, use them
     if (paymentMethod && recipient) {
-      // Don't allow email as payment method - it's only for contacting
+      // Don't allow email or agent as payment method - only wallets can receive
       if (paymentMethod === 'email') {
         return NextResponse.json(
           { error: 'Email is for contacting the creator, not for payments. Please use wallet address or x402 payment.' },
+          { status: 400 }
+        );
+      }
+      if (paymentMethod === 'agent') {
+        return NextResponse.json(
+          { error: 'Agents cannot receive payments. Please use wallet address or x402 payment.' },
           { status: 400 }
         );
       }
@@ -71,14 +77,11 @@ export async function POST(request: NextRequest) {
       finalRecipient = recipient;
       console.log('Using provided payment method:', finalPaymentMethod, 'recipient:', finalRecipient.substring(0, 20) + '...');
     } else {
-      // Auto-detect payment method from listing (prioritize wallet > agent > x402)
-      // Email is NOT used for payments - only for contacting creators
-      if (listing.sellerWalletAddress) {
+      // Auto-detect payment method from listing (prioritize wallet > x402)
+      // Only wallets can receive payments - agents cannot receive
+      if (listing.sellerWalletAddress || listing.sellerWallet) {
         finalPaymentMethod = 'wallet';
-        finalRecipient = listing.sellerWalletAddress;
-      } else if (listing.sellerApiKey) {
-        finalPaymentMethod = 'agent';
-        finalRecipient = listing.sellerApiKey;
+        finalRecipient = listing.sellerWalletAddress || listing.sellerWallet;
       } else {
         // Try x402 as fallback
         finalPaymentMethod = 'x402';
@@ -89,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     if (!finalRecipient) {
       return NextResponse.json(
-        { error: 'No payment recipient found. Listing must have sellerWalletAddress or sellerApiKey. Email is only for contacting the creator.' },
+        { error: 'No payment recipient found. Listing must have sellerWalletAddress. Agents cannot receive payments, only wallets can.' },
         { status: 400 }
       );
     }

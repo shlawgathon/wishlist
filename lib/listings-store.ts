@@ -16,8 +16,7 @@ export interface Listing {
   _id?: ObjectId;
   id: string;
   name: string;
-  description: string;
-  fullDescription: string;
+  description?: string; // Optional description
   companyProfile: {
     name: string;
     logo?: string;
@@ -39,9 +38,8 @@ export interface Listing {
   category: string;
   sellerWallet: string; // Legacy: CDP wallet address
   sellerWalletId: string; // Legacy: CDP wallet ID
-  sellerApiKey?: string; // Optional: Seller agent's API key
-  sellerEmail?: string; // Optional: Seller email for escrow payments
-  sellerWalletAddress?: string; // Optional: Seller wallet address for direct transfers
+  sellerEmail?: string; // Optional: Seller email for contacting creator (not for payments)
+  sellerWalletAddress?: string; // Required: Seller wallet address for receiving payments (agents cannot receive)
   embedding?: number[]; // For Voyager vector search
   creatorUsername?: string; // Username of the creator
   createdAt: number;

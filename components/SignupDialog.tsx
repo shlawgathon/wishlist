@@ -5,11 +5,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CheckCircle2, Info } from 'lucide-react';
 
 interface SignupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (user: { username: string; buyerApiKey?: string }) => void;
+  onSuccess: (user: { username: string; buyerApiKey: string }) => void;
   switchToLogin: () => void;
 }
 
@@ -19,6 +21,7 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
   const [buyerApiKey, setBuyerApiKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +35,7 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
         body: JSON.stringify({ 
           username, 
           password,
-          buyerApiKey: buyerApiKey.trim() || undefined,
+          buyerApiKey: buyerApiKey.trim(),
         }),
       });
 
@@ -43,11 +46,18 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
         return;
       }
 
-      onSuccess(data.user);
-      onOpenChange(false);
-      setUsername('');
-      setPassword('');
-      setBuyerApiKey('');
+      // Show success message with note about listing wallets
+      setShowSuccess(true);
+      
+      // Wait a moment to show the success message, then proceed
+      setTimeout(() => {
+        onSuccess(data.user);
+        onOpenChange(false);
+        setUsername('');
+        setPassword('');
+        setBuyerApiKey('');
+        setShowSuccess(false);
+      }, 3000);
     } catch (error) {
       setError('Failed to create account. Please try again.');
       console.error('Signup error:', error);
@@ -92,24 +102,45 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="buyer-api-key">Buyer API Key (Optional)</Label>
+            <Label htmlFor="buyer-api-key">Locus Buyer API Key *</Label>
             <Input
               id="buyer-api-key"
-              type="text"
+              type="password"
               value={buyerApiKey}
               onChange={(e) => setBuyerApiKey(e.target.value)}
-              placeholder="locus_dev_... or locus_... (can add later)"
+              placeholder="locus_dev_... or locus_..."
+              required
             />
             <p className="text-xs text-muted-foreground">
-              Your Locus buyer API key for making payments. You can add this later in settings.
+              Your Locus buyer API key is required for account creation. Create one on the Locus platform before signing up.
             </p>
           </div>
           {error && (
             <div className="text-sm text-red-500">{error}</div>
           )}
+          {showSuccess && (
+            <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-sm">
+                <div className="space-y-2">
+                  <p className="font-semibold text-green-800 dark:text-green-200">
+                    Account created successfully!
+                  </p>
+                  <Alert className="mt-2 border-blue-500 bg-blue-50 dark:bg-blue-950">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>Important:</strong> Each listing you create needs its own wallet address. 
+                      When creating a listing, you'll need to provide a seller wallet address or seller API key 
+                      to receive payments. Make sure to set up a separate wallet for each project.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="flex flex-col gap-2">
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating account...' : 'Sign Up'}
+            <Button type="submit" disabled={loading || showSuccess}>
+              {loading ? 'Creating account...' : showSuccess ? 'Account Created!' : 'Sign Up'}
             </Button>
             <Button
               type="button"

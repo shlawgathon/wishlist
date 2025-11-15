@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
     const {
       name,
       description,
-      fullDescription,
       companyName,
       companyBio,
       companyWebsite,
@@ -28,31 +27,22 @@ export async function POST(request: NextRequest) {
       daysLeft,
       category,
       tiers,
-      sellerApiKey,
       sellerEmail,
       sellerWalletAddress,
     } = body;
 
-    // Validate required fields
-    if (!name || !description || !fullDescription || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers) {
+    // Validate required fields (description is optional)
+    if (!name || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // At least one payment method must be provided
-    if (!sellerApiKey && !sellerEmail && !sellerWalletAddress) {
+    // Wallet address is required for receiving payments (agents cannot receive)
+    if (!sellerWalletAddress) {
       return NextResponse.json(
-        { error: 'At least one payment method is required: sellerApiKey, sellerEmail, or sellerWalletAddress' },
-        { status: 400 }
-      );
-    }
-
-    // Validate seller API key format if provided
-    if (sellerApiKey && !sellerApiKey.startsWith('locus_dev_') && !sellerApiKey.startsWith('locus_')) {
-      return NextResponse.json(
-        { error: 'Invalid Locus API key format. API keys must be created manually on Locus.' },
+        { error: 'Seller wallet address is required. Agents cannot receive payments, only wallets can.' },
         { status: 400 }
       );
     }
@@ -95,8 +85,7 @@ export async function POST(request: NextRequest) {
     const listing: Listing = {
       id: `listing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
-      description,
-      fullDescription,
+      description: description || undefined, // Optional description
       companyProfile: {
         name: companyName,
         bio: companyBio,
@@ -117,9 +106,8 @@ export async function POST(request: NextRequest) {
       category,
       sellerWallet: sellerWallet.address, // Legacy CDP wallet address
       sellerWalletId: sellerWallet.walletId, // Legacy CDP wallet ID
-      sellerApiKey: sellerApiKey || undefined, // Optional: Seller agent's API key
-      sellerEmail: sellerEmail || undefined, // Optional: Seller email for escrow payments
-      sellerWalletAddress: sellerWalletAddress || undefined, // Optional: Seller wallet address for direct transfers
+      sellerEmail: sellerEmail || undefined, // Optional: Seller email for contacting creator (not for payments)
+      sellerWalletAddress: sellerWalletAddress, // Required: Seller wallet address for receiving payments
       creatorUsername: user.username, // Store creator username
       createdAt: Date.now(),
     };

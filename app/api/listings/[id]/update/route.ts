@@ -26,7 +26,6 @@ export async function PUT(
     const {
       name,
       description,
-      fullDescription,
       companyName,
       companyBio,
       companyWebsite,
@@ -34,7 +33,6 @@ export async function PUT(
       daysLeft,
       category,
       tiers,
-      sellerApiKey,
       sellerEmail,
       sellerWalletAddress,
     } = body;
@@ -56,10 +54,18 @@ export async function PUT(
       );
     }
 
-    // Validate required fields
-    if (!name || !description || !fullDescription || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers) {
+    // Validate required fields (description is optional)
+    if (!name || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Wallet address is required for receiving payments (agents cannot receive)
+    if (sellerWalletAddress !== undefined && !sellerWalletAddress) {
+      return NextResponse.json(
+        { error: 'Seller wallet address is required. Agents cannot receive payments, only wallets can.' },
         { status: 400 }
       );
     }
@@ -67,8 +73,7 @@ export async function PUT(
     // Prepare update data
     const updateData: any = {
       name,
-      description,
-      fullDescription,
+      description: description || undefined, // Optional description
       companyProfile: {
         name: companyName,
         bio: companyBio,
@@ -87,10 +92,9 @@ export async function PUT(
       })),
     };
 
-    // Update optional payment fields if provided
-    if (sellerApiKey !== undefined) updateData.sellerApiKey = sellerApiKey || undefined;
+    // Update optional payment fields if provided (only wallet address, agents cannot receive)
     if (sellerEmail !== undefined) updateData.sellerEmail = sellerEmail || undefined;
-    if (sellerWalletAddress !== undefined) updateData.sellerWalletAddress = sellerWalletAddress || undefined;
+    if (sellerWalletAddress !== undefined) updateData.sellerWalletAddress = sellerWalletAddress;
 
     // Regenerate embedding if Voyager is configured
     try {

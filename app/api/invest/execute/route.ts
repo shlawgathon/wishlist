@@ -1,20 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeBatchInvestments, initLocusAgent } from '@/lib/locus-agent';
+import { executeBatchInvestments } from '@/lib/locus-agent';
 import { discoverServices } from '@/lib/x402-client';
 import { updateAgentMemory } from '@/lib/claude-agent';
-
-// Initialize Locus with API keys (can be overridden by client-provided key)
-const getLocusConfig = (clientApiKey?: string) => {
-  return initLocusAgent({
-    buyerApiKey: clientApiKey || process.env.LOCUS_BUYER_API_KEY,
-    sellerApiKey: process.env.LOCUS_SELLER_API_KEY,
-  });
-};
+import { getCurrentUser } from '@/lib/auth';
+import { getListingById } from '@/lib/listings-store';
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user (required for buyer API key)
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please login to make investments.' },
+        { status: 401 }
+      );
+    }
+
+    // Buyer API key is required (agents can send, wallets receive)
+    if (!user.buyerApiKey) {
+      return NextResponse.json(
+        { error: 'Buyer API key is required. Please add your Locus buyer API key in your account settings.' },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
-    const { investments, walletId, userId, locusBuyerApiKey } = body;
+    const { investments, walletId } = body;
 
     // Validate input
     if (!investments || !Array.isArray(investments) || investments.length === 0) {
@@ -31,29 +42,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Locus with client-provided API key or fallback to env
-    const locusConfig = getLocusConfig(locusBuyerApiKey);
-
-    // Get wallet config
-    const walletConfig = {
-      apiKeyName: process.env.CDP_API_KEY_NAME || '',
-      apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY || '',
-    };
-
     // Get project endpoints from x402 Bazaar
     const services = await discoverServices(process.env.X402_BAZAAR_ENDPOINT);
     const serviceMap = new Map(services.map(s => [s.id, s.endpoint]));
 
-    // Prepare investment batch
-    const investmentBatch = {
-      investments: investments.map((inv: { projectId: string; amount: number }) => ({
+    // Fetch listings to get wallet addresses (agents cannot receive, only wallets can)
+    const investmentPromises = investments.map(async (inv: { projectId: string; amount: number }) => {
+      const listing = await getListingById(inv.projectId);
+      if (!listing) {
+        throw new Error(`Listing not found: ${inv.projectId}`);
+      }
+
+      // Only wallet addresses can receive payments (agents cannot receive)
+      const recipient = listing.sellerWalletAddress || listing.sellerWallet;
+      if (!recipient) {
+        throw new Error(`Listing ${inv.projectId} does not have a wallet address for receiving payments`);
+      }
+
+      return {
         projectId: inv.projectId,
         amount: inv.amount,
-        projectEndpoint: serviceMap.get(inv.projectId) || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/projects/${inv.projectId}`,
-        recipient: '', // Will be determined during payment execution
+        projectEndpoint: serviceMap.get(inv.projectId) || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/listings/${inv.projectId}`,
+        recipient, // Wallet address for receiving payments
         paymentMethod: 'x402' as const,
-      })),
-      buyerApiKey: locusConfig.buyerApiKey,
+      };
+    });
+
+    const investmentDetails = await Promise.all(investmentPromises);
+
+    // Prepare investment batch with buyer's API key from account
+    const investmentBatch = {
+      investments: investmentDetails,
+      buyerApiKey: user.buyerApiKey, // Always use buyer's account API key
     };
 
     // Execute batch investments using Locus

@@ -85,6 +85,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ result });
       } catch (error) {
         console.error('Locus MCP error, falling back to standard Claude:', error);
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          name: error instanceof Error ? error.name : undefined,
+        });
         // Fall through to standard Claude
       }
     }

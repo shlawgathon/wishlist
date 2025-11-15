@@ -10,8 +10,7 @@ export interface ProjectTier {
 export interface ProjectListing {
   id: string;
   name: string;
-  description: string;
-  fullDescription: string;
+  description?: string; // Optional description
   companyProfile: {
     name: string;
     logo?: string;
@@ -25,8 +24,7 @@ export interface ProjectListing {
   tiers: ProjectTier[];
   images?: string[];
   category: string;
-  sellerApiKey?: string; // Optional: Agent API key
-  sellerEmail?: string; // Optional: Email for escrow payments
-  sellerWalletAddress?: string; // Optional: Wallet address for direct transfers
+  sellerEmail?: string; // Optional: Email for contacting creator (not for payments)
+  sellerWalletAddress?: string; // Required: Wallet address for receiving payments (agents cannot receive)
 }
 

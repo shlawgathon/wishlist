@@ -30,10 +30,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate buyer API key format if provided
-    if (buyerApiKey && !buyerApiKey.startsWith('locus_dev_') && !buyerApiKey.startsWith('locus_')) {
+    // Buyer API key is required for account creation
+    if (!buyerApiKey || !buyerApiKey.trim()) {
       return NextResponse.json(
-        { error: 'Invalid Locus API key format. Should start with "locus_dev_" or "locus_"' },
+        { error: 'Locus buyer API key is required. Please create one on the Locus platform before signing up.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate buyer API key format
+    const trimmedApiKey = buyerApiKey.trim();
+    if (!trimmedApiKey.startsWith('locus_dev_') && !trimmedApiKey.startsWith('locus_')) {
+      return NextResponse.json(
+        { error: 'Invalid Locus API key format. API keys must start with "locus_dev_" or "locus_" and be created on the Locus platform.' },
         { status: 400 }
       );
     }
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
       const user = await createUser({
         username,
         passwordHash,
-        buyerApiKey: buyerApiKey || undefined,
+        buyerApiKey: trimmedApiKey,
       });
 
       // Create session

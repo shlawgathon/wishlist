@@ -15,8 +15,7 @@ const mockProjects: ProjectListingType[] = [
   {
     id: 'project-1',
     name: 'Mechanical Keyboard Pro',
-    description: 'Premium mechanical keyboard with custom switches and RGB lighting',
-    fullDescription: `Introducing the Mechanical Keyboard Pro - a premium mechanical keyboard designed for enthusiasts and professionals.
+    description: `Premium mechanical keyboard with custom switches and RGB lighting. Introducing the Mechanical Keyboard Pro - a premium mechanical keyboard designed for enthusiasts and professionals.
 
 Features:
 - Custom mechanical switches (Cherry MX, Gateron, or Kailh options)
@@ -82,8 +81,7 @@ We've partnered with established manufacturers and have secured all necessary ce
   {
     id: 'project-2',
     name: 'AI-Powered Drone',
-    description: 'Advanced drone with AI navigation and 4K camera',
-    fullDescription: `The AI-Powered Drone represents the next generation of consumer drones, combining cutting-edge AI technology with professional-grade camera capabilities.
+    description: `Advanced drone with AI navigation and 4K camera. The AI-Powered Drone represents the next generation of consumer drones, combining cutting-edge AI technology with professional-grade camera capabilities.
 
 Key Features:
 - AI-powered obstacle avoidance
@@ -134,8 +132,7 @@ Our team has over 10 years of experience in drone technology and has worked with
   {
     id: 'project-3',
     name: 'Smart Home Hub',
-    description: 'Open-source smart home automation hub',
-    fullDescription: `The Smart Home Hub is an open-source platform that brings all your smart devices together in one unified system.
+    description: `Open-source smart home automation hub. The Smart Home Hub is an open-source platform that brings all your smart devices together in one unified system.
 
 Features:
 - Support for 100+ device protocols
@@ -200,7 +197,6 @@ export default function ListingsPage() {
               id: listing.id,
               name: listing.name,
               description: listing.description,
-              fullDescription: listing.fullDescription,
               companyProfile: listing.companyProfile,
               fundingGoal: listing.fundingGoal,
               amountRaised: listing.amountRaised,
@@ -210,7 +206,6 @@ export default function ListingsPage() {
               tiers: listing.tiers,
               sellerWalletAddress: listing.sellerWalletAddress || listing.sellerWallet,
               sellerEmail: listing.sellerEmail,
-              sellerApiKey: listing.sellerApiKey,
             }));
           
           // Don't include mock projects - they should be in the database if needed

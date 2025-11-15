@@ -19,16 +19,14 @@ export default function CreatorDashboard() {
     const [formData, setFormData] = useState({
       name: '',
       description: '',
-      fullDescription: '',
       companyName: '',
       companyBio: '',
       companyWebsite: '',
       fundingGoal: '',
       daysLeft: '',
       category: '',
-      sellerApiKey: '', // Optional: Agent API key
-      sellerEmail: '', // Optional: Email for escrow payments
-      sellerWalletAddress: '', // Optional: Wallet address for direct transfers
+      sellerEmail: '', // Optional: Email for contacting creator (not for payments)
+      sellerWalletAddress: '', // Required: Wallet address for receiving payments (agents cannot receive)
     });
   const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
     { name: '', description: '', amount: 0, rewards: [''] },
@@ -131,14 +129,12 @@ export default function CreatorDashboard() {
     setFormData({
       name: '',
       description: '',
-      fullDescription: '',
       companyName: '',
       companyBio: '',
       companyWebsite: '',
       fundingGoal: '',
       daysLeft: '',
       category: '',
-      sellerApiKey: '',
       sellerEmail: '',
       sellerWalletAddress: '',
     });
@@ -305,24 +301,13 @@ export default function CreatorDashboard() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="description">Short Description *</Label>
+                      <Label htmlFor="description">Description</Label>
                       <Textarea
                         id="description"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={2}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="fullDescription">Full Description *</Label>
-                      <Textarea
-                        id="fullDescription"
-                        value={formData.fullDescription}
-                        onChange={(e) => setFormData({ ...formData, fullDescription: e.target.value })}
                         rows={6}
-                        required
+                        placeholder="Optional: Describe your project in detail..."
                       />
                     </div>
 
@@ -394,23 +379,10 @@ export default function CreatorDashboard() {
                                 placeholder="0x..."
                               />
                               <p className="text-xs text-muted-foreground">
-                                Enables direct transfers to any wallet address.
+                                Required: Wallet address for receiving payments. Agents cannot receive payments, only wallets can.
                               </p>
                             </div>
 
-                            <div className="space-y-2">
-                              <Label htmlFor="sellerApiKey">Locus Seller API Key (Agent Payments)</Label>
-                              <Input
-                                id="sellerApiKey"
-                                type="password"
-                                value={formData.sellerApiKey}
-                                onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
-                                placeholder="locus_dev_..."
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Enables agent-to-agent payments. Must be manually created on the Locus platform.
-                              </p>
-                            </div>
                           </div>
                   </div>
 
@@ -619,15 +591,13 @@ export default function CreatorDashboard() {
                                       // Load listing data into form for editing
                                       setFormData({
                                         name: listing.name,
-                                        description: listing.description,
-                                        fullDescription: listing.fullDescription,
+                                        description: listing.description || '',
                                         companyName: listing.companyProfile?.name || '',
                                         companyBio: listing.companyProfile?.bio || '',
                                         companyWebsite: listing.companyProfile?.website || '',
                                         fundingGoal: listing.fundingGoal.toString(),
                                         daysLeft: listing.daysLeft.toString(),
                                         category: listing.category,
-                                        sellerApiKey: listing.sellerApiKey || '',
                                         sellerEmail: listing.sellerEmail || '',
                                         sellerWalletAddress: listing.sellerWalletAddress || '',
                                       });

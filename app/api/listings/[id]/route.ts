@@ -71,7 +71,6 @@ export async function GET(
           id: listing.id,
           name: listing.name,
           description: listing.description,
-          fullDescription: listing.fullDescription,
           companyProfile: listing.companyProfile,
           fundingGoal: listing.fundingGoal,
           amountRaised: listing.amountRaised,

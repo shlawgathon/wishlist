@@ -3,8 +3,7 @@ export const mockListings = [
   {
     id: 'project-1',
     name: 'Mechanical Keyboard Pro',
-    description: 'Premium mechanical keyboard with custom switches and RGB lighting',
-    fullDescription: 'Introducing the Mechanical Keyboard Pro - a premium mechanical keyboard designed for enthusiasts and professionals.',
+    description: 'Premium mechanical keyboard with custom switches and RGB lighting. Introducing the Mechanical Keyboard Pro - a premium mechanical keyboard designed for enthusiasts and professionals.',
     companyProfile: {
       name: 'KeyTech Innovations',
       bio: 'Building the future of typing, one key at a time',
@@ -29,8 +28,7 @@ export const mockListings = [
   {
     id: 'project-2',
     name: 'AI-Powered Drone',
-    description: 'Advanced drone with AI navigation and 4K camera',
-    fullDescription: 'The AI-Powered Drone represents the next generation of consumer drones, combining cutting-edge AI technology with professional-grade camera capabilities.',
+    description: 'Advanced drone with AI navigation and 4K camera. The AI-Powered Drone represents the next generation of consumer drones, combining cutting-edge AI technology with professional-grade camera capabilities.',
     companyProfile: {
       name: 'SkyTech Drones',
       bio: 'Innovating aerial technology since 2015',
@@ -55,8 +53,7 @@ export const mockListings = [
   {
     id: 'project-3',
     name: 'Smart Home Hub',
-    description: 'Open-source smart home automation hub',
-    fullDescription: 'The Smart Home Hub is an open-source platform that brings all your smart devices together in one unified system.',
+    description: 'Open-source smart home automation hub. The Smart Home Hub is an open-source platform that brings all your smart devices together in one unified system.',
     companyProfile: {
       name: 'OpenHome Labs',
       bio: 'Democratizing smart home technology',

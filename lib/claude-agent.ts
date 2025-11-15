@@ -300,32 +300,77 @@ export async function useLocusWithClaude(
     }
 
     let finalResult: string = '';
+    let hasResult = false;
     
-    for await (const message of query({
-      prompt,
-      options
-    })) {
-      // Handle different message types
-      if (message.type === 'result' && message.subtype === 'success') {
-        const result = (message as any).result;
-        finalResult = extractTextFromResult(result);
-      } else if ((message as any).type === 'text') {
-        // Direct text message
-        finalResult = (message as any).text || (message as any).content || '';
-      } else if ((message as any).type === 'content' && (message as any).content) {
-        // Content block message
-        const content = (message as any).content;
-        if (typeof content === 'string') {
-          finalResult = content;
-        } else if (content?.text) {
-          finalResult = content.text;
-        } else if (Array.isArray(content) && content[0]?.text) {
-          finalResult = content[0].text;
+    try {
+      for await (const message of query({
+        prompt,
+        options
+      })) {
+        hasResult = true;
+        
+        // Handle different message types
+        if (message.type === 'result') {
+          if ((message as any).subtype === 'success') {
+            const result = (message as any).result;
+            const extracted = extractTextFromResult(result);
+            if (extracted) {
+              finalResult = extracted;
+            }
+          } else if ((message as any).subtype === 'error') {
+            const errorMsg = (message as any).error || (message as any).message || 'Unknown error';
+            console.error('Claude Agent SDK error:', errorMsg);
+            throw new Error(`Claude Agent SDK error: ${errorMsg}`);
+          }
+        } else if ((message as any).type === 'text') {
+          // Direct text message
+          const text = (message as any).text || (message as any).content || '';
+          if (text) {
+            finalResult = text;
+          }
+        } else if ((message as any).type === 'content' && (message as any).content) {
+          // Content block message
+          const content = (message as any).content;
+          if (typeof content === 'string') {
+            finalResult = content;
+          } else if (content?.text) {
+            finalResult = content.text;
+          } else if (Array.isArray(content) && content[0]?.text) {
+            finalResult = content[0].text;
+          }
+        } else if ((message as any).content) {
+          // Handle content blocks directly
+          const content = (message as any).content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'text' && block.text) {
+                finalResult = block.text;
+                break;
+              }
+            }
+          }
         }
       }
-    }
 
-    return finalResult;
+      if (!hasResult) {
+        console.warn('Claude Agent SDK query returned no messages');
+        return 'No response generated';
+      }
+
+      if (!finalResult) {
+        console.warn('Claude Agent SDK query completed but no text content was extracted');
+        return 'No response generated';
+      }
+
+      return finalResult;
+    } catch (iterError) {
+      // If the error is from the query iteration itself, wrap it
+      if (iterError instanceof Error) {
+        console.error('Error during Claude Agent SDK query iteration:', iterError.message);
+        throw new Error(`Claude Agent SDK query failed: ${iterError.message}`);
+      }
+      throw iterError;
+    }
   } catch (error) {
     console.error('Error using Locus with Claude:', error);
     throw error;
