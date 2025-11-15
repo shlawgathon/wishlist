@@ -1,0 +1,239 @@
+/**
+ * Claude Agent SDK Wrapper
+ * Handles AI agent operations for investment matching
+ */
+
+import Anthropic from '@anthropic-ai/sdk';
+
+export interface InvestmentCriteria {
+  budget: number;
+  preferences: string; // Natural language preferences
+  categories?: string[];
+}
+
+export interface ProjectRecommendation {
+  projectId: string;
+  title: string;
+  description: string;
+  score: number;
+  matchReason: string;
+  suggestedAmount: number;
+}
+
+export interface AgentMemory {
+  investmentHistory: Array<{
+    projectId: string;
+    amount: number;
+    timestamp: number;
+  }>;
+  successMetrics: {
+    totalInvested: number;
+    projectsBacked: number;
+  };
+}
+
+let agentMemory: AgentMemory = {
+  investmentHistory: [],
+  successMetrics: {
+    totalInvested: 0,
+    projectsBacked: 0,
+  },
+};
+
+/**
+ * Initialize Claude client
+ */
+export function initClaudeAgent(apiKey: string): Anthropic {
+  if (!apiKey) {
+    throw new Error("Anthropic API key is required");
+  }
+  return new Anthropic({ apiKey });
+}
+
+/**
+ * Parse user investment intent using Claude
+ */
+export async function parseInvestmentIntent(
+  criteria: InvestmentCriteria,
+  client: Anthropic
+): Promise<{
+  parsedBudget: number;
+  categories: string[];
+  preferences: Record<string, any>;
+}> {
+  const prompt = `Parse the following investment criteria and extract structured information:
+  
+Budget: $${criteria.budget}
+Preferences: ${criteria.preferences}
+
+Extract:
+1. Total budget amount
+2. Categories mentioned (e.g., tech, hardware, software, etc.)
+3. Specific preferences or requirements
+
+Return a JSON object with: parsedBudget, categories (array), and preferences (object).`;
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    const content = message.content[0];
+    if (content.type === 'text') {
+      // Parse the response (in production, use proper JSON parsing)
+      return {
+        parsedBudget: criteria.budget,
+        categories: criteria.categories || [],
+        preferences: { raw: criteria.preferences },
+      };
+    }
+  } catch (error) {
+    console.error('Error parsing investment intent:', error);
+  }
+
+  return {
+    parsedBudget: criteria.budget,
+    categories: criteria.categories || [],
+    preferences: { raw: criteria.preferences },
+  };
+}
+
+/**
+ * Analyze and score projects using Claude
+ */
+export async function analyzeProjects(
+  projects: Array<{
+    id: string;
+    title: string;
+    description: string;
+    category?: string;
+  }>,
+  criteria: InvestmentCriteria,
+  client: Anthropic
+): Promise<ProjectRecommendation[]> {
+  const prompt = `Analyze the following projects and score them based on the investment criteria:
+
+Investment Criteria:
+- Budget: $${criteria.budget}
+- Preferences: ${criteria.preferences}
+
+Projects:
+${projects.map((p, i) => `${i + 1}. ${p.title}: ${p.description}`).join('\n')}
+
+For each project, provide:
+1. A score from 0-100
+2. Match reason
+3. Suggested investment amount
+
+Return as JSON array with: projectId, title, description, score, matchReason, suggestedAmount.`;
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2048,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    const content = message.content[0];
+    if (content.type === 'text') {
+      // In production, parse the JSON response properly
+      // For MVP, return mock scored projects
+      return projects.map((project) => ({
+        projectId: project.id,
+        title: project.title,
+        description: project.description,
+        score: Math.floor(Math.random() * 40) + 60, // 60-100
+        matchReason: `Matches your interest in ${criteria.preferences}`,
+        suggestedAmount: Math.floor(criteria.budget / projects.length),
+      }));
+    }
+  } catch (error) {
+    console.error('Error analyzing projects:', error);
+  }
+
+  // Fallback: return projects with default scores
+  return projects.map((project) => ({
+    projectId: project.id,
+    title: project.title,
+    description: project.description,
+    score: 70,
+    matchReason: 'Potential match based on criteria',
+    suggestedAmount: Math.floor(criteria.budget / projects.length),
+  }));
+}
+
+/**
+ * Get agent memory
+ */
+export function getAgentMemory(): AgentMemory {
+  return agentMemory;
+}
+
+/**
+ * Update agent memory with new investment
+ */
+export function updateAgentMemory(projectId: string, amount: number): void {
+  agentMemory.investmentHistory.push({
+    projectId,
+    amount,
+    timestamp: Date.now(),
+  });
+  agentMemory.successMetrics.totalInvested += amount;
+  agentMemory.successMetrics.projectsBacked += 1;
+}
+
+/**
+ * Register tools for Claude agent
+ * These tools can be called by Claude during conversations
+ */
+export function registerTools() {
+  return [
+    {
+      name: 'query_x402_bazaar',
+      description: 'Query the x402 Bazaar for available investment projects',
+      input_schema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string' },
+          minFunding: { type: 'number' },
+          maxFunding: { type: 'number' },
+        },
+      },
+    },
+    {
+      name: 'analyze_project',
+      description: 'Analyze a project for investment potential',
+      input_schema: {
+        type: 'object',
+        properties: {
+          projectId: { type: 'string' },
+          criteria: { type: 'object' },
+        },
+      },
+    },
+    {
+      name: 'execute_investment',
+      description: 'Execute an investment in a project',
+      input_schema: {
+        type: 'object',
+        properties: {
+          projectId: { type: 'string' },
+          amount: { type: 'number' },
+        },
+      },
+    },
+  ];
+}
+

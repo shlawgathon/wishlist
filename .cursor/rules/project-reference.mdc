@@ -1,0 +1,302 @@
+---
+alwaysApply: true
+---
+# Wishlist - One Day Hackathon Stack
+## Crypto Fundraising Platform with AI Matching
+
+### 🎯 Project Overview
+```toon
+title: CryptoFund AI Platform Architecture
+---
+[User/Backer] --> (Web Interface)
+(Web Interface) --> [Claude Agent SDK]
+[Claude Agent SDK] <--> [Investment Matcher]
+[Investment Matcher] --> [Locus Payment Agent]
+[Locus Payment Agent] <--> [CDP Wallet]
+[CDP Wallet] --> [x402 Protocol]
+[x402 Protocol] --> [Creator Wallet]
+[Creator Wallet] --> [Project Creator]
+```
+
+### 🏗️ Tech Stack Components
+
+#### **Hour 1-2: Setup & Foundation**
+```toon
+title: Core Infrastructure Setup
+---
+[Frontend Website]
+  |-- React/Next.js
+  |-- Tailwind CSS
+  |-- Web3 Modal
+  
+[Agent Layer]
+  |-- Claude AgentSDK
+  |-- Locus Agent
+  |-- x402 Client
+  
+[Blockchain Layer]
+  |-- CDP Embedded Wallets
+  |-- Smart Contracts (Base/Ethereum)
+  |-- USDC Integration
+```
+
+#### **Hour 3-5: Agent Flow Architecture**
+```toon
+title: Autonomous Investment Matching Flow
+---
+[User Input: "$50 keyboard, $100 drone"]
+  |
+  v
+[Claude Agent]
+  |-- Parse Intent
+  |-- Query x402 Bazaar
+  |-- Discover Projects
+  |
+  v
+[Investment Analyzer]
+  |-- Score Projects
+  |-- Match Preferences
+  |-- Budget Allocation
+  |
+  v
+[Locus Payment Orchestrator]
+  |-- Create CDP Wallet
+  |-- Sign Transactions
+  |-- Execute Payments
+```
+
+#### **Hour 6-7: Payment Flow Implementation**
+```toon
+title: x402 Payment Chain
+---
+[Investment Request] --> [Service Discovery]
+  |
+  v
+[HTTP Request to Project API]
+  |
+  v
+[402 Payment Required Response]
+  |-- Payment Amount: 50 USDC
+  |-- Recipient: Creator Wallet
+  |
+  v
+[CDP Wallet Signs Payment]
+  |
+  v
+[X-PAYMENT Header Attached]
+  |
+  v
+[Transaction Complete]
+  |
+  v
+[Update Funding Progress]
+```
+
+### 💼 Key Features Implementation
+
+#### **Creator Dashboard**
+```toon
+title: Creator Project Listing Flow
+---
+[Create Project]
+  |-- Title/Description
+  |-- Funding Goal
+  |-- Milestones
+  |
+  v
+[Generate CDP Wallet]
+  |
+  v
+[Register with x402 Bazaar]
+  |-- Set Pricing
+  |-- Define Tiers
+  |
+  v
+[Publish to Platform]
+```
+
+#### **Backer Experience**
+```toon
+title: AI-Powered Investment Flow
+---
+[Set Budget & Preferences]
+  |
+  v
+[Claude Analyzes]
+  |-- Project Quality
+  |-- Creator History
+  |-- Market Trends
+  |
+  v
+[Recommendations Generated]
+  |
+  v
+[One-Click Investment]
+  |-- Locus Executes
+  |-- CDP Wallet Processes
+  |-- x402 Confirms
+```
+
+### 🔄 Autonomous Agent Loop
+```toon
+title: Multi-Tool Chain Execution
+---
+start: User Sets Investment Criteria
+---
+[Query x402 Bazaar] --> [Discover Projects]
+  |
+  v
+[Claude Evaluates] --> [Score & Rank]
+  |
+  v
+[Check Budget] --> [Allocate Funds]
+  |
+  v
+[Locus Agent]
+  |-- For each project:
+  |   |-- Call API (402 response)
+  |   |-- Process payment
+  |   |-- Confirm investment
+  |
+  v
+[Generate Report] --> [Notify User]
+```
+
+### 📊 Data Flow & Storage
+```toon
+title: Platform Data Architecture
+---
+[Frontend State]
+  |-- User Preferences
+  |-- Active Investments
+  |
+[Agent Memory]
+  |-- Investment History
+  |-- Success Metrics
+  |
+[Blockchain State]
+  |-- Transaction Records
+  |-- Wallet Balances
+  |
+[IPFS/Arweave]
+  |-- Project Assets
+  |-- Documentation
+```
+
+### 🚀 Deployment Strategy
+
+#### **Hour 8: Integration & Testing**
+```toon
+title: Service Integration Points
+---
+[Coinbase CDP]
+  |-- Embedded Wallet SDK
+  |-- Server Wallet API v2
+  
+[Claude AgentSDK]
+  |-- Tool Registration
+  |-- Memory Management
+  
+[Locus Platform]
+  |-- Payment Rails
+  |-- Agent Configuration
+  
+[x402 Protocol]
+  |-- Bazaar Discovery
+  |-- Payment Headers
+```
+
+### 🎨 User Interface Components
+```toon
+title: Website Layout
+---
+[Header]
+  |-- Connect Wallet
+  |-- Agent Status
+  
+[Main Dashboard]
+  |-- Featured Projects
+  |-- AI Recommendations
+  |-- Investment Tracker
+  
+[Project Cards]
+  |-- Funding Progress
+  |-- Quick Invest
+  |-- Details Modal
+  
+[Agent Console]
+  |-- Budget Settings
+  |-- Preference Tuning
+  |-- Activity Log
+```
+
+### 💡 Innovation Points
+
+1. **Autonomous Discovery**: Agent queries x402 Bazaar for new investment opportunities
+2. **Intelligent Matching**: Claude SDK analyzes project-backer fit
+3. **Seamless Payments**: Locus + CDP wallets enable frictionless transactions
+4. **Chained Operations**: Multiple tool calls with micropayments per operation
+5. **Economic Agency**: Agent manages budget autonomously within constraints
+
+### 🏁 MVP Features for Demo
+
+- **Basic Flow**:
+  1. User connects wallet
+  2. Sets investment preferences ($X for category Y)
+  3. Claude agent discovers & recommends projects
+  4. One-click batch investment via Locus
+  5. Real-time funding updates
+
+- **Creator Tools**:
+  - Simple project creation form
+  - Auto-generate CDP wallet
+  - View funding progress
+  - Withdraw funds button
+
+- **Agent Capabilities**:
+  - Parse natural language investment goals
+  - Query multiple data sources via x402
+  - Execute multi-step payment chains
+  - Track spending vs. utility
+
+### 🔗 API Endpoints
+```toon
+title: Service Endpoints
+---
+[/api/agent/match]
+  |-- POST: Investment criteria
+  |-- Returns: Matched projects
+  
+[/api/projects/create]
+  |-- POST: Project details
+  |-- Returns: Project ID + wallet
+  
+[/api/invest/execute]
+  |-- POST: Investment batch
+  |-- Returns: Transaction hashes
+  
+[/api/x402/discover]
+  |-- GET: Available services
+  |-- Returns: Tool registry
+```
+
+### ⚡ Quick Start Commands
+```bash
+# No actual code - conceptual flow only
+1. Setup CDP wallet integration
+2. Configure Claude AgentSDK
+3. Initialize Locus payment agent
+4. Deploy x402 service discovery
+5. Launch Next.js frontend
+6. Connect all services via API
+```
+
+### 📈 Success Metrics
+- Agent successfully discovers projects via x402 Bazaar
+- Claude matches investments to user preferences
+- Locus executes payments through CDP wallets
+- End-to-end autonomous funding in < 30 seconds
+- Multiple chained tool calls with micropayments
+
+---!!! IMPORTANT DOCUMENTATION
+@Locus @Claude Agent SDK @x402 
