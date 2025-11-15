@@ -1,9 +1,12 @@
 /**
  * Claude Agent SDK Wrapper
  * Handles AI agent operations for investment matching
+ * Supports MCP (Model Context Protocol) for Locus integration
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { getLocusMCPServers, getLocusAllowedTools, canUseLocusTool } from './locus-mcp';
 
 export interface InvestmentCriteria {
   budget: number;
@@ -235,5 +238,47 @@ export function registerTools() {
       },
     },
   ];
+}
+
+/**
+ * Use Claude Agent SDK with Locus MCP for autonomous payments
+ * This enables Claude to directly use Locus tools via MCP
+ * 
+ * @export
+ * @param {string} prompt - The prompt to send to Claude
+ * @param {string} anthropicApiKey - Anthropic API key
+ * @param {string} locusApiKey - Locus API key for MCP
+ * @returns {Promise<string>} The response from Claude
+ */
+export async function useLocusWithClaude(
+  prompt: string,
+  anthropicApiKey: string,
+  locusApiKey: string
+): Promise<string> {
+  try {
+    const mcpServers = getLocusMCPServers(locusApiKey);
+    const options = {
+      mcpServers,
+      allowedTools: getLocusAllowedTools(),
+      apiKey: anthropicApiKey,
+      canUseTool: canUseLocusTool,
+    };
+
+    let finalResult: string = '';
+    
+    for await (const message of query({
+      prompt,
+      options
+    })) {
+      if (message.type === 'result' && message.subtype === 'success') {
+        finalResult = (message as any).result?.content?.[0]?.text || JSON.stringify((message as any).result);
+      }
+    }
+
+    return finalResult;
+  } catch (error) {
+    console.error('Error using Locus with Claude:', error);
+    throw error;
+  }
 }
 

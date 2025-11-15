@@ -25,7 +25,7 @@ AI-powered crypto fundraising platform with autonomous investment matching using
 - API keys for:
   - Anthropic (Claude)
   - Coinbase CDP
-  - Locus (optional for MVP)
+  - Locus (Buyer and Seller API Keys - Required for payments)
   - x402 Bazaar endpoint
 
 ### Installation
@@ -51,10 +51,24 @@ Edit `.env.local` with your API keys:
 ANTHROPIC_API_KEY=your_key_here
 CDP_API_KEY_NAME=your_key_name
 CDP_API_KEY_PRIVATE_KEY=your_private_key
-LOCUS_API_KEY=your_locus_key (optional)
+
+# Locus API Keys (Required for payments)
+# Buyer API Key: Used for making payments (investments)
+LOCUS_BUYER_API_KEY=locus_dev_MCkl3AYiHaJ2nMIZ76OUbyR2kbsTgUsm
+# Seller API Key: Used for receiving payments (project creators)
+LOCUS_SELLER_API_KEY=locus_dev_I1mtiYkoDe6_pLBJhgl3PZxmDEpXbGWP
+
 X402_BAZAAR_ENDPOINT=https://bazaar.x402.example.com
 NETWORK=base
 ```
+
+**Locus Integration**: 
+- Locus enables AI agents to autonomously send payments on Base Mainnet using USDC
+- Uses MCP (Model Context Protocol) for integration with Claude Agent SDK
+- Buyer API Key is used when making investments (backers)
+- Seller API Key is used when receiving payments (creators)
+- MCP Server: `https://mcp.paywithlocus.com/mcp`
+- Documentation: https://docs.payai.network/locus
 
 4. Run the development server:
 ```bash

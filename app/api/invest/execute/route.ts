@@ -3,10 +3,18 @@ import { executeBatchInvestments, initLocusAgent } from '@/lib/locus-agent';
 import { discoverServices } from '@/lib/x402-client';
 import { updateAgentMemory } from '@/lib/claude-agent';
 
+// Initialize Locus with API keys (can be overridden by client-provided key)
+const getLocusConfig = (clientApiKey?: string) => {
+  return initLocusAgent({
+    buyerApiKey: clientApiKey || process.env.LOCUS_BUYER_API_KEY,
+    sellerApiKey: process.env.LOCUS_SELLER_API_KEY,
+  });
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { investments, walletId, userId } = body;
+    const { investments, walletId, userId, locusBuyerApiKey } = body;
 
     // Validate input
     if (!investments || !Array.isArray(investments) || investments.length === 0) {
@@ -23,11 +31,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Locus agent
-    const locusConfig = initLocusAgent({
-      apiKey: process.env.LOCUS_API_KEY,
-      endpoint: process.env.LOCUS_ENDPOINT,
-    });
+    // Initialize Locus with client-provided API key or fallback to env
+    const locusConfig = getLocusConfig(locusBuyerApiKey);
 
     // Get wallet config
     const walletConfig = {
@@ -50,8 +55,11 @@ export async function POST(request: NextRequest) {
       walletConfig,
     };
 
-    // Execute batch investments
-    const result = await executeBatchInvestments(investmentBatch);
+    // Execute batch investments using Locus
+    const result = await executeBatchInvestments(
+      investmentBatch,
+      locusConfig.buyerApiKey
+    );
 
     // Update agent memory
     result.results.forEach((paymentResult) => {

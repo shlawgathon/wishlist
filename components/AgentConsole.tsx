@@ -80,6 +80,15 @@ export default function AgentConsole() {
       return;
     }
 
+    // Check for Locus API key
+    const locusApiKey = localStorage.getItem('locus_buyer_api_key');
+    if (!locusApiKey) {
+      addLog('Warning', 'No Locus API Key found. Please connect wallet first.', 'error');
+      alert('Please connect your wallet with Locus API key first');
+      return;
+    }
+    addLog('Locus API Key Found', 'Using stored Locus Buyer API Key for payments', 'success');
+
     setIsActive(true);
     addLog('Executing Investments', `Processing ${allocations.length} investments`, 'pending');
 
@@ -92,6 +101,7 @@ export default function AgentConsole() {
           investments: allocations,
           walletId,
           userId: 'user_' + Date.now(),
+          locusBuyerApiKey: locusApiKey,
         }),
       });
 
