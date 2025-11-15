@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
         {
           id: listing.id,
           name: listing.name,
-          description: listing.description,
+          description: listing.description || '',
           endpoint: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/listings/${listing.id}`,
           pricing: {
             amount: fundingGoal.toString(),

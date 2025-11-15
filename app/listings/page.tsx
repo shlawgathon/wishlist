@@ -294,7 +294,7 @@ export default function ListingsPage() {
       const filtered = projects.filter(
         (p) =>
           p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.category.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredProjects(filtered);

@@ -61,7 +61,6 @@ export async function POST(request: NextRequest) {
           ...mockListing,
           sellerWallet: finalWalletAddress, // Legacy CDP wallet address
           sellerWalletId: `wallet_${mockListing.id}`, // Legacy CDP wallet ID
-          sellerApiKey: sellerApiKey, // Seller agent's API key
           sellerWalletAddress: finalWalletAddress, // Seller wallet address for direct transfers (prioritized in checkout)
           creatorUsername: 'system', // Mark as system-created (migrated listings)
           createdAt: Date.now(),

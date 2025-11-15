@@ -75,7 +75,6 @@ async function main() {
           ...mockListing,
           sellerWallet: sellerWalletAddress,
           sellerWalletId: `wallet_${mockListing.id}`,
-          sellerApiKey: SELLER_API_KEY as string,
           sellerWalletAddress: sellerWalletAddress,
           createdAt: Date.now(),
         };
