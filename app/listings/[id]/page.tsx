@@ -81,6 +81,41 @@ export default function ListingDetailPage() {
     fetchListing();
   }, [listingId, liveListing]);
 
+  // Sync wallet balance every 3 seconds
+  useEffect(() => {
+    if (!listing?.id) return;
+
+    const syncBalance = async () => {
+      try {
+        const response = await fetch(`/api/listings/${listing.id}/sync-balance`, {
+          method: 'POST',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.updated && data.newAmount !== undefined) {
+            // Update local state if balance changed
+            setListing((prev) => prev ? {
+              ...prev,
+              amountRaised: data.newAmount,
+            } : null);
+          }
+        }
+      } catch (error) {
+        // Silently fail - don't spam console
+        console.debug('Balance sync error:', error);
+      }
+    };
+
+    // Initial sync
+    syncBalance();
+
+    // Poll every 3 seconds
+    const interval = setInterval(syncBalance, 3000);
+
+    return () => clearInterval(interval);
+  }, [listing?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">

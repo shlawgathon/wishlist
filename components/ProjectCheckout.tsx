@@ -27,6 +27,14 @@ export default function ProjectCheckout({
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [customAmount, setCustomAmount] = useState(tier.amount.toString());
+  // Auto-select best available payment method (prioritize wallet > agent > x402)
+  // Note: sellerEmail is for contacting the creator, NOT for payments
+  const getBestPaymentMethod = (): 'agent' | 'wallet' | 'x402' => {
+    if (project.sellerWalletAddress) return 'wallet';
+    if (project.sellerApiKey) return 'agent';
+    return 'x402';
+  };
+  const [paymentMethod, setPaymentMethod] = useState<'agent' | 'wallet' | 'x402' | null>(getBestPaymentMethod());
 
   const handleCheckout = async () => {
     const amount = parseFloat(customAmount);
@@ -38,18 +46,45 @@ export default function ProjectCheckout({
     setLoading(true);
 
     try {
-      // Get Locus API keys
-      const buyerApiKey = localStorage.getItem('locus_buyer_api_key');
-      if (!buyerApiKey) {
-        alert('Please connect your wallet with Locus API key first');
+      // Buyer API key is now stored in user session and retrieved automatically by the backend
+      // No need to pass it from the frontend
+
+      // Quick checkout: Auto-select best available method if none selected
+      // Priority: wallet > agent > x402
+      // Note: sellerEmail is for contacting the creator, NOT for payments
+      let finalPaymentMethod = paymentMethod;
+      let recipient = '';
+
+      if (!finalPaymentMethod) {
+        // Auto-select best available method
+        if (project.sellerWalletAddress) {
+          finalPaymentMethod = 'wallet';
+          recipient = project.sellerWalletAddress;
+        } else if (project.sellerApiKey) {
+          finalPaymentMethod = 'agent';
+          recipient = project.sellerApiKey;
+        } else {
+          finalPaymentMethod = 'x402';
+          recipient = `${window.location.origin}/api/listings/${project.id}`;
+        }
+      } else {
+        // Use selected method
+        if (finalPaymentMethod === 'wallet' && project.sellerWalletAddress) {
+          recipient = project.sellerWalletAddress;
+        } else if (finalPaymentMethod === 'agent' && project.sellerApiKey) {
+          recipient = project.sellerApiKey;
+        } else if (finalPaymentMethod === 'x402') {
+          recipient = `${window.location.origin}/api/listings/${project.id}`;
+        }
+      }
+
+      if (!recipient) {
+        alert(`Selected payment method (${finalPaymentMethod}) is not available for this listing.`);
         setLoading(false);
         return;
       }
 
-      // Get seller wallet from project (in production, this would be from project data)
-      const sellerWallet = project.companyProfile.name; // Mock for now
-
-      // Call checkout API
+      // Call checkout API with payment method
       const response = await fetch('/api/listings/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,13 +92,15 @@ export default function ProjectCheckout({
           projectId: project.id,
           tierId: tier.id,
           amount,
-          buyerApiKey,
-          sellerApiKey: process.env.NEXT_PUBLIC_LOCUS_SELLER_API_KEY, // In production, get from project
+          paymentMethod: finalPaymentMethod,
+          recipient,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Checkout failed');
+        const errorData = await response.json().catch(() => ({ error: 'Checkout failed' }));
+        const errorMessage = errorData.error || errorData.details || 'Checkout failed';
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -81,7 +118,8 @@ export default function ProjectCheckout({
       }, 2000);
     } catch (error) {
       console.error('Checkout error:', error);
-      alert('Checkout failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Checkout failed. Please try again.';
+      alert(`Checkout failed: ${errorMessage}\n\nCheck the browser console and server logs for details.`);
     } finally {
       setLoading(false);
     }
@@ -142,6 +180,79 @@ export default function ProjectCheckout({
                   Minimum: ${tier.amount}
                 </p>
               </div>
+
+              {/* Payment Method Selection - Only show if multiple options available */}
+              {(project.sellerWalletAddress && project.sellerApiKey) ? (
+                <div className="space-y-2">
+                  <Label>Payment Method (Optional)</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {project.sellerWalletAddress && (
+                      <Button
+                        type="button"
+                        variant={paymentMethod === 'wallet' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPaymentMethod(paymentMethod === 'wallet' ? null : 'wallet')}
+                      >
+                        Wallet
+                      </Button>
+                    )}
+                    {project.sellerApiKey && (
+                      <Button
+                        type="button"
+                        variant={paymentMethod === 'agent' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPaymentMethod(paymentMethod === 'agent' ? null : 'agent')}
+                      >
+                        Agent
+                      </Button>
+                    )}
+                    {/* Only show x402 if no other options */}
+                    {!project.sellerWalletAddress && !project.sellerApiKey && (
+                      <Button
+                        type="button"
+                        variant={paymentMethod === 'x402' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPaymentMethod(paymentMethod === 'x402' ? null : 'x402')}
+                      >
+                        x402 API
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {paymentMethod === 'wallet' && 'Direct transfer to wallet address'}
+                    {paymentMethod === 'agent' && 'Agent-to-agent payment (requires API key)'}
+                    {paymentMethod === 'x402' && 'x402 API payment'}
+                    {!paymentMethod && 'Quick checkout will use: ' + (project.sellerWalletAddress ? 'Wallet' : project.sellerApiKey ? 'Agent' : 'x402')}
+                  </p>
+                  {project.sellerEmail && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💬 Contact creator: {project.sellerEmail}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Show selected method info when only one option */
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <div className="p-3 rounded-lg border bg-muted/50">
+                    <p className="text-sm font-medium">
+                      {paymentMethod === 'wallet' && 'Direct transfer to wallet address'}
+                      {paymentMethod === 'agent' && 'Agent-to-agent payment'}
+                      {paymentMethod === 'x402' && 'x402 API payment'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {paymentMethod === 'wallet' && project.sellerWalletAddress}
+                      {paymentMethod === 'agent' && 'Using seller agent API key'}
+                      {paymentMethod === 'x402' && 'Using x402 protocol'}
+                    </p>
+                    {project.sellerEmail && (
+                      <p className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                        💬 Contact creator: {project.sellerEmail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Payment Summary */}
               <div className="space-y-2 p-4 rounded-lg border">

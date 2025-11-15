@@ -25,5 +25,8 @@ export interface ProjectListing {
   tiers: ProjectTier[];
   images?: string[];
   category: string;
+  sellerApiKey?: string; // Optional: Agent API key
+  sellerEmail?: string; // Optional: Email for escrow payments
+  sellerWalletAddress?: string; // Optional: Wallet address for direct transfers
 }
 

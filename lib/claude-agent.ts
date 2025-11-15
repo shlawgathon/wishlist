@@ -309,10 +309,10 @@ export async function useLocusWithClaude(
       if (message.type === 'result' && message.subtype === 'success') {
         const result = (message as any).result;
         finalResult = extractTextFromResult(result);
-      } else if (message.type === 'text') {
+      } else if ((message as any).type === 'text') {
         // Direct text message
         finalResult = (message as any).text || (message as any).content || '';
-      } else if (message.type === 'content' && (message as any).content) {
+      } else if ((message as any).type === 'content' && (message as any).content) {
         // Content block message
         const content = (message as any).content;
         if (typeof content === 'string') {

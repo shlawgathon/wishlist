@@ -26,7 +26,9 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
     fundingGoal: '',
     daysLeft: '',
     category: '',
-    sellerApiKey: '',
+    sellerApiKey: '', // Optional: Agent API key
+    sellerEmail: '', // Optional: Email for escrow payments
+    sellerWalletAddress: '', // Optional: Wallet address for direct transfers
   });
   const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
     { name: '', description: '', amount: 0, rewards: [''] },
@@ -73,30 +75,35 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create listing');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.details || 'Failed to create listing';
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       onCreate(data.project);
       
       // Reset form
-      setFormData({
-        name: '',
-        description: '',
-        fullDescription: '',
-        companyName: '',
-        companyBio: '',
-        companyWebsite: '',
-        fundingGoal: '',
-        daysLeft: '',
-        category: '',
-        sellerApiKey: '',
-      });
+            setFormData({
+              name: '',
+              description: '',
+              fullDescription: '',
+              companyName: '',
+              companyBio: '',
+              companyWebsite: '',
+              fundingGoal: '',
+              daysLeft: '',
+              category: '',
+              sellerApiKey: '',
+              sellerEmail: '',
+              sellerWalletAddress: '',
+            });
       setTiers([{ name: '', description: '', amount: 0, rewards: [''] }]);
       onOpenChange(false);
     } catch (error) {
       console.error('Error creating listing:', error);
-      alert('Failed to create listing');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create listing';
+      alert(`Failed to create listing: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -183,20 +190,56 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="sellerApiKey">Locus Seller API Key *</Label>
-              <Input
-                id="sellerApiKey"
-                type="password"
-                value={formData.sellerApiKey}
-                onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
-                placeholder="locus_dev_..."
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Your Locus seller API key for receiving payments. This will be used to create your seller wallet.
-              </p>
-            </div>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">Payment Methods (at least one required)</h4>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        Choose how you want to receive payments. You can enable multiple methods.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sellerEmail">Email Address (Escrow Payments)</Label>
+                      <Input
+                        id="sellerEmail"
+                        type="email"
+                        value={formData.sellerEmail}
+                        onChange={(e) => setFormData({ ...formData, sellerEmail: e.target.value })}
+                        placeholder="seller@example.com"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enables escrow payments via email. Recipient will receive payment instructions.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sellerWalletAddress">Wallet Address (Direct Transfers)</Label>
+                      <Input
+                        id="sellerWalletAddress"
+                        type="text"
+                        value={formData.sellerWalletAddress}
+                        onChange={(e) => setFormData({ ...formData, sellerWalletAddress: e.target.value })}
+                        placeholder="0x..."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enables direct transfers to any wallet address.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sellerApiKey">Locus Seller API Key (Agent Payments)</Label>
+                      <Input
+                        id="sellerApiKey"
+                        type="password"
+                        value={formData.sellerApiKey}
+                        onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
+                        placeholder="locus_dev_..."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enables agent-to-agent payments. Must be manually created on the Locus platform.
+                      </p>
+                    </div>
+                  </div>
           </div>
 
           {/* Company Profile */}

@@ -1,9 +1,19 @@
 /**
- * Shared listings store
- * In production, this would be a database
+ * MongoDB listings store
+ * Replaces in-memory store with MongoDB Atlas
  */
 
+import clientPromise from './mongodb';
+import type { ObjectId } from 'mongodb';
+
+const DB_NAME = 'database'; // Using 'database' to match your Atlas structure
+const COLLECTIONS = {
+  listings: 'listings',
+  comments: 'comments',
+};
+
 export interface Listing {
+  _id?: ObjectId;
   id: string;
   name: string;
   description: string;
@@ -27,113 +37,161 @@ export interface Listing {
     estimatedDelivery?: string;
   }>;
   category: string;
-  sellerWallet: string;
-  sellerWalletId: string;
-  sellerApiKey?: string; // Seller's Locus API key for receiving payments
+  sellerWallet: string; // Legacy: CDP wallet address
+  sellerWalletId: string; // Legacy: CDP wallet ID
+  sellerApiKey?: string; // Optional: Seller agent's API key
+  sellerEmail?: string; // Optional: Seller email for escrow payments
+  sellerWalletAddress?: string; // Optional: Seller wallet address for direct transfers
+  embedding?: number[]; // For Voyager vector search
+  creatorUsername?: string; // Username of the creator
   createdAt: number;
 }
 
-// In-memory store
-const listings: Listing[] = [];
-
-export function getAllListings(): Listing[] {
-  return listings;
-}
-
-export function getListingById(id: string): Listing | undefined {
-  return listings.find(l => l.id === id);
-}
-
-export function createListing(listing: Listing): Listing {
-  listings.push(listing);
-  // Notify listeners
-  listingUpdateListeners.forEach(listener => listener(listing));
-  return listing;
-}
-
-export function updateListing(id: string, updates: Partial<Listing>): Listing | null {
-  const index = listings.findIndex(l => l.id === id);
-  if (index === -1) {
-    return null;
-  }
-  const updated = { ...listings[index], ...updates };
-  listings[index] = updated;
-  // Notify listeners
-  listingUpdateListeners.forEach(listener => listener(updated));
-  return updated;
-}
-
-export function addFunding(id: string, amount: number): Listing | null {
-  const listing = getListingById(id);
-  if (!listing) {
-    return null;
-  }
-  const updated = updateListing(id, {
-    amountRaised: listing.amountRaised + amount,
-    backers: listing.backers + 1,
-  });
-  
-  if (updated) {
-    // Notify listeners
-    listingUpdateListeners.forEach(listener => listener(updated));
-  }
-  
-  return updated;
-}
-
-// Comments store
-const commentsStore: Record<string, Comment[]> = {}; // projectId -> comments
-
 export interface Comment {
+  _id?: ObjectId;
   id: string;
+  listingId: string;
   author: string;
   avatar?: string;
   content: string;
   timestamp: number;
 }
 
-export function getComments(projectId: string): Comment[] {
-  return commentsStore[projectId] || [];
-}
-
-export function addComment(projectId: string, comment: Comment): Comment {
-  if (!commentsStore[projectId]) {
-    commentsStore[projectId] = [];
+// Database operations
+export async function getAllListings(): Promise<Listing[]> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    // Sort by createdAt descending (newest first)
+    return collection.find({}).sort({ createdAt: -1 }).toArray();
+  } catch (error) {
+    console.error('Error fetching all listings:', error);
+    return [];
   }
-  commentsStore[projectId].push(comment);
-  
-  // Notify listeners
-  commentListeners.forEach(listener => listener(projectId, comment));
-  
-  return comment;
 }
 
-// Pub-sub for real-time updates
-type UpdateListener = (listing: Listing) => void;
-type CommentListener = (projectId: string, comment: Comment) => void;
-
-const listingUpdateListeners = new Set<UpdateListener>();
-const commentListeners = new Set<CommentListener>();
-
-export function subscribeToListingUpdates(listener: UpdateListener): () => void {
-  listingUpdateListeners.add(listener);
-  return () => {
-    listingUpdateListeners.delete(listener);
-  };
+// Get listings by creator username
+export async function getListingsByCreator(username: string): Promise<Listing[]> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    // Sort by createdAt descending (newest first)
+    return collection.find({ creatorUsername: username }).sort({ createdAt: -1 }).toArray();
+  } catch (error) {
+    console.error('Error fetching listings by creator:', error);
+    return [];
+  }
 }
 
-export function unsubscribeFromListingUpdates(listener: UpdateListener): void {
-  listingUpdateListeners.delete(listener);
+export async function getListingById(id: string): Promise<Listing | null> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    return collection.findOne({ id }) || null;
+  } catch (error) {
+    console.error('Error fetching listing by id:', error);
+    return null;
+  }
 }
 
-export function subscribeToCommentUpdates(listener: CommentListener): () => void {
-  commentListeners.add(listener);
-  return () => {
-    commentListeners.delete(listener);
-  };
+export async function createListing(listing: Listing): Promise<Listing> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    const result = await collection.insertOne(listing);
+    console.log('Listing created successfully:', result.insertedId);
+    return listing;
+  } catch (error) {
+    console.error('Error creating listing in MongoDB:', error);
+    console.error('Listing data:', JSON.stringify(listing, null, 2));
+    throw new Error(`MongoDB error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
-export function unsubscribeFromCommentUpdates(listener: CommentListener): void {
-  commentListeners.delete(listener);
+export async function updateListing(
+  id: string,
+  updates: Partial<Listing>
+): Promise<Listing | null> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    const result = await collection.findOneAndUpdate(
+      { id },
+      { $set: updates },
+      { returnDocument: 'after' }
+    );
+    
+    return result || null;
+  } catch (error) {
+    console.error('Error updating listing:', error);
+    return null;
+  }
 }
 
+export async function addFunding(
+  id: string,
+  amount: number
+): Promise<Listing | null> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Listing>(COLLECTIONS.listings);
+    
+    const result = await collection.findOneAndUpdate(
+      { id },
+      {
+        $inc: {
+          amountRaised: amount,
+          backers: 1,
+        },
+      },
+      { returnDocument: 'after' }
+    );
+    
+    return result || null;
+  } catch (error) {
+    console.error('Error adding funding:', error);
+    return null;
+  }
+}
+
+// Comments operations
+export async function getComments(listingId: string): Promise<Comment[]> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Comment>(COLLECTIONS.comments);
+    
+    return collection
+      .find({ listingId })
+      .sort({ timestamp: -1 })
+      .toArray();
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    return [];
+  }
+}
+
+export async function addComment(comment: Comment): Promise<Comment> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<Comment>(COLLECTIONS.comments);
+    
+    await collection.insertOne(comment);
+    return comment;
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    throw error;
+  }
+}

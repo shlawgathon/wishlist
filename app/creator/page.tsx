@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,28 +11,32 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, CheckCircle2, X } from 'lucide-react';
+import { Plus, CheckCircle2, X, Trash2 } from 'lucide-react';
 import type { ProjectTier } from '@/types/project';
 
 export default function CreatorDashboard() {
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    fullDescription: '',
-    companyName: '',
-    companyBio: '',
-    companyWebsite: '',
-    fundingGoal: '',
-    daysLeft: '',
-    category: '',
-    sellerApiKey: '',
-  });
+    const router = useRouter();
+    const [formData, setFormData] = useState({
+      name: '',
+      description: '',
+      fullDescription: '',
+      companyName: '',
+      companyBio: '',
+      companyWebsite: '',
+      fundingGoal: '',
+      daysLeft: '',
+      category: '',
+      sellerApiKey: '', // Optional: Agent API key
+      sellerEmail: '', // Optional: Email for escrow payments
+      sellerWalletAddress: '', // Optional: Wallet address for direct transfers
+    });
   const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
     { name: '', description: '', amount: 0, rewards: [''] },
   ]);
   const [loading, setLoading] = useState(false);
   const [createdProject, setCreatedProject] = useState<any>(null);
   const [listings, setListings] = useState<any[]>([]);
+  const [editingListingId, setEditingListingId] = useState<string | null>(null);
 
   const addTier = () => {
     setTiers([...tiers, { name: '', description: '', amount: 0, rewards: [''] }]);
@@ -56,56 +61,145 @@ export default function CreatorDashboard() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/listings/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          fundingGoal: parseFloat(formData.fundingGoal),
-          daysLeft: parseInt(formData.daysLeft),
-          tiers: tiers.map((tier, idx) => ({
-            ...tier,
-            id: `tier-${idx + 1}`,
-            amount: parseFloat(tier.amount.toString()),
-          })),
-        }),
-      });
+      let response;
+      
+      if (editingListingId) {
+        // Update existing listing
+        response = await fetch(`/api/listings/${editingListingId}/update`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            fundingGoal: parseFloat(formData.fundingGoal),
+            daysLeft: parseInt(formData.daysLeft),
+            tiers: tiers.map((tier, idx) => ({
+              ...tier,
+              id: `tier-${idx + 1}`,
+              amount: parseFloat(tier.amount.toString()),
+            })),
+          }),
+        });
+      } else {
+        // Create new listing
+        response = await fetch('/api/listings/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            fundingGoal: parseFloat(formData.fundingGoal),
+            daysLeft: parseInt(formData.daysLeft),
+            tiers: tiers.map((tier, idx) => ({
+              ...tier,
+              id: `tier-${idx + 1}`,
+              amount: parseFloat(tier.amount.toString()),
+            })),
+          }),
+        });
+      }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create listing');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.details || `HTTP ${response.status}: Failed to ${editingListingId ? 'update' : 'create'} listing`;
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      setCreatedProject(data.project);
       
-      // Reset form
-      setFormData({
-        name: '',
-        description: '',
-        fullDescription: '',
-        companyName: '',
-        companyBio: '',
-        companyWebsite: '',
-        fundingGoal: '',
-        daysLeft: '',
-        category: '',
-        sellerApiKey: '',
-      });
-      setTiers([{ name: '', description: '', amount: 0, rewards: [''] }]);
-      loadListings();
+      if (editingListingId) {
+        setCreatedProject({ ...data.listing, updated: true });
+      } else {
+        setCreatedProject(data.project);
+      }
+      
+      // Reload listings
+      await loadListings();
+      
+      // Reset form and clear edit state
+      handleCancel();
     } catch (error) {
-      console.error('Error creating listing:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create listing';
-      alert(`Listing creation failed: ${errorMessage}`);
+      console.error(`Error ${editingListingId ? 'updating' : 'creating'} listing:`, error);
+      const errorMessage = error instanceof Error ? error.message : `Failed to ${editingListingId ? 'update' : 'create'} listing`;
+      alert(`Failed to ${editingListingId ? 'update' : 'create'} listing:\n\n${errorMessage}\n\nCheck the browser console and server logs for details.`);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleCancel = () => {
+    setEditingListingId(null);
+    setCreatedProject(null);
+    setFormData({
+      name: '',
+      description: '',
+      fullDescription: '',
+      companyName: '',
+      companyBio: '',
+      companyWebsite: '',
+      fundingGoal: '',
+      daysLeft: '',
+      category: '',
+      sellerApiKey: '',
+      sellerEmail: '',
+      sellerWalletAddress: '',
+    });
+    setTiers([{ name: '', description: '', amount: 0, rewards: [''] }]);
+  };
+
+  const handleDelete = async (listingId: string) => {
+    if (!confirm('Are you sure you want to delete this listing? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/listings/${listingId}/delete`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete listing');
+      }
+
+      // Reload listings
+      await loadListings();
+      
+      // Clear edit state if we were editing this listing
+      if (editingListingId === listingId) {
+        handleCancel();
+      }
+    } catch (error) {
+      console.error('Error deleting listing:', error);
+      alert(`Failed to delete listing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
+
+  useEffect(() => {
+    // Check auth status
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser(data.user);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      }
+    };
+    checkAuth();
+  }, []);
+
   const loadListings = async () => {
     try {
-      const response = await fetch('/api/listings/create');
+      // Only load listings if user is authenticated
+      if (!currentUser) {
+        setListings([]);
+        return;
+      }
+      
+      const response = await fetch('/api/listings/my-listings');
       if (response.ok) {
         const data = await response.json();
         setListings(data.listings || []);
@@ -117,7 +211,7 @@ export default function CreatorDashboard() {
 
   useEffect(() => {
     loadListings();
-  }, []);
+  }, [currentUser]);
 
 
   return (
@@ -130,14 +224,14 @@ export default function CreatorDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card>
+          <Card id="create-form">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Create New Project Listing
+                {editingListingId ? 'Edit Project Listing' : 'Create New Project Listing'}
               </CardTitle>
               <CardDescription>
-                Launch your fundraising campaign
+                {editingListingId ? 'Update your fundraising campaign' : 'Launch your fundraising campaign'}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
@@ -215,20 +309,56 @@ export default function CreatorDashboard() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="sellerApiKey">Locus Seller API Key *</Label>
-                      <Input
-                        id="sellerApiKey"
-                        type="password"
-                        value={formData.sellerApiKey}
-                        onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
-                        placeholder="locus_dev_..."
-                        required
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Your Locus seller API key for receiving payments. This will be used to create your seller wallet.
-                      </p>
-                    </div>
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="text-sm font-semibold mb-3">Payment Methods (at least one required)</h4>
+                              <p className="text-xs text-muted-foreground mb-4">
+                                Choose how you want to receive payments. You can enable multiple methods.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="sellerEmail">Email Address (Escrow Payments)</Label>
+                              <Input
+                                id="sellerEmail"
+                                type="email"
+                                value={formData.sellerEmail}
+                                onChange={(e) => setFormData({ ...formData, sellerEmail: e.target.value })}
+                                placeholder="seller@example.com"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Enables escrow payments via email. Recipient will receive payment instructions.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="sellerWalletAddress">Wallet Address (Direct Transfers)</Label>
+                              <Input
+                                id="sellerWalletAddress"
+                                type="text"
+                                value={formData.sellerWalletAddress}
+                                onChange={(e) => setFormData({ ...formData, sellerWalletAddress: e.target.value })}
+                                placeholder="0x..."
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Enables direct transfers to any wallet address.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="sellerApiKey">Locus Seller API Key (Agent Payments)</Label>
+                              <Input
+                                id="sellerApiKey"
+                                type="password"
+                                value={formData.sellerApiKey}
+                                onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
+                                placeholder="locus_dev_..."
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Enables agent-to-agent payments. Must be manually created on the Locus platform.
+                              </p>
+                            </div>
+                          </div>
                   </div>
 
                   {/* Company Profile */}
@@ -337,23 +467,45 @@ export default function CreatorDashboard() {
                     ))}
                   </div>
 
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? 'Creating...' : 'Create Listing'}
-                  </Button>
+                  <div className="flex gap-2">
+                    {editingListingId && (
+                      <Button 
+                        type="button" 
+                        onClick={handleCancel} 
+                        variant="outline" 
+                        disabled={loading}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    <Button type="submit" disabled={loading} className={editingListingId ? "flex-1" : "w-full"}>
+                      {loading 
+                        ? (editingListingId ? 'Updating...' : 'Creating...') 
+                        : (editingListingId ? 'Update Listing' : 'Create Listing')
+                      }
+                    </Button>
+                  </div>
                 </form>
 
                 {createdProject && (
                   <div className="mt-6 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
                     <div className="flex items-center gap-2 mb-2">
                       <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      <h3 className="font-semibold text-green-800 dark:text-green-200">Listing Created!</h3>
+                      <h3 className="font-semibold text-green-800 dark:text-green-200">
+                        {createdProject.updated ? 'Listing Updated!' : 'Listing Created!'}
+                      </h3>
                     </div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Wallet: {createdProject.sellerWallet?.substring(0, 20)}...
-                    </p>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Listing ID: {createdProject.id}
-                    </p>
+                    {!createdProject.updated && (
+                      <>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Wallet: {createdProject.sellerWallet?.substring(0, 20)}...
+                        </p>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Listing ID: {createdProject.id}
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
                   </div>
@@ -380,18 +532,76 @@ export default function CreatorDashboard() {
                     {listings.map((listing) => {
                       const progress = (listing.amountRaised / listing.fundingGoal) * 100;
                       return (
-                        <div key={listing.id} className="border rounded-lg p-4 space-y-3">
+                        <div 
+                          key={listing.id} 
+                          className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                          onClick={(e) => {
+                            // Don't navigate if clicking on buttons
+                            if ((e.target as HTMLElement).closest('button')) {
+                              return;
+                            }
+                            router.push(`/listings/${listing.id}`);
+                          }}
+                        >
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <h3 className="font-semibold">{listing.name}</h3>
+                              <h3 className="font-semibold hover:text-primary">{listing.name}</h3>
                               <Badge variant="secondary" className="mt-1">{listing.category}</Badge>
                             </div>
-                            {progress >= 100 && (
-                              <Badge variant="default" className="gap-1">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Funded
-                              </Badge>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {progress >= 100 && (
+                                <Badge variant="default" className="gap-1">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Funded
+                                </Badge>
+                              )}
+                              {listing.creatorUsername === currentUser?.username && (
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Set editing state
+                                      setEditingListingId(listing.id);
+                                      // Load listing data into form for editing
+                                      setFormData({
+                                        name: listing.name,
+                                        description: listing.description,
+                                        fullDescription: listing.fullDescription,
+                                        companyName: listing.companyProfile?.name || '',
+                                        companyBio: listing.companyProfile?.bio || '',
+                                        companyWebsite: listing.companyProfile?.website || '',
+                                        fundingGoal: listing.fundingGoal.toString(),
+                                        daysLeft: listing.daysLeft.toString(),
+                                        category: listing.category,
+                                        sellerApiKey: listing.sellerApiKey || '',
+                                        sellerEmail: listing.sellerEmail || '',
+                                        sellerWalletAddress: listing.sellerWalletAddress || '',
+                                      });
+                                      setTiers(listing.tiers.map(t => ({
+                                        name: t.name,
+                                        description: t.description,
+                                        amount: t.amount,
+                                        rewards: t.rewards,
+                                        estimatedDelivery: t.estimatedDelivery,
+                                      })));
+                                      // Scroll to form
+                                      document.getElementById('create-form')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDelete(listing.id)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <p className="text-sm text-muted-foreground line-clamp-2">
                             {listing.description}
@@ -410,9 +620,11 @@ export default function CreatorDashboard() {
                             </div>
                           </div>
                           {progress >= 100 && (
-                            <Button className="w-full" variant="default">
-                              Withdraw Funds
-                            </Button>
+                            <div className="p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900">
+                              <p className="text-xs text-green-700 dark:text-green-300">
+                                ✓ Funds are automatically in your wallet: {listing.sellerWalletAddress?.substring(0, 10)}...
+                              </p>
+                            </div>
                           )}
                         </div>
                       );

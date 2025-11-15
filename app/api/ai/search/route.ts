@@ -24,22 +24,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch all available listings (API + mock)
-    const apiListings = getAllListings();
+    // Fetch all available listings from MongoDB
+    const apiListings = await getAllListings();
+    
+    // Filter out mock/test listings
+    const mockIds = ['project-1', 'project-2', 'project-3'];
+    const filteredListings = apiListings.filter(listing => {
+      // Exclude system-created (migrated mock) listings
+      if (listing.creatorUsername === 'system') {
+        return false;
+      }
+      // Exclude mock listing IDs
+      if (mockIds.includes(listing.id)) {
+        return false;
+      }
+      // Exclude test listings
+      if (listing.name && /test/i.test(listing.name)) {
+        return false;
+      }
+      return true;
+    });
+    
     // Use request URL to determine base URL dynamically
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const host = request.headers.get('host') || 'localhost:3000';
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 
-    const allListings = [
-      ...apiListings,
-      ...mockListings.map(mock => ({
-        ...mock,
-        sellerWallet: '',
-        sellerWalletId: '',
-        createdAt: Date.now(),
-      })),
-    ];
+    // Don't include mock listings - only use real database listings
+    const allListings = filteredListings;
 
     // Format listings for Claude with clickable links
     const listingsInfo = allListings.map((listing) => ({
@@ -101,7 +113,7 @@ export async function POST(request: NextRequest) {
     });
 
     const content = message.content[0];
-    if (content.type === 'text') {
+    if (content && 'type' in content && content.type === 'text') {
       return NextResponse.json({ result: content.text });
     }
 

@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// In-memory comments store (in production, use a database)
-const comments: Record<string, Array<{
-  id: string;
-  author: string;
-  avatar?: string;
-  content: string;
-  timestamp: number;
-}>> = {};
+import { getComments, addComment, type Comment } from '@/lib/listings-store';
 
 export async function GET(
   request: NextRequest,
@@ -15,8 +7,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const comments = await getComments(id);
     return NextResponse.json({
-      comments: comments[id] || [],
+      comments,
     });
   } catch (error) {
     console.error('Error fetching comments:', error);
@@ -43,18 +36,15 @@ export async function POST(
       );
     }
 
-    if (!comments[id]) {
-      comments[id] = [];
-    }
-
-    const comment = {
+    const comment: Comment = {
       id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      listingId: id,
       author,
       content,
       timestamp: Date.now(),
     };
 
-    comments[id].push(comment);
+    await addComment(comment);
 
     return NextResponse.json({
       success: true,

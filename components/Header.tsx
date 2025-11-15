@@ -4,25 +4,71 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Wallet } from 'lucide-react';
-import WalletConnectDialog from './WalletConnectDialog';
+import { Wallet, LogOut, User } from 'lucide-react';
+import LoginDialog from './LoginDialog';
+import SignupDialog from './SignupDialog';
+
+interface User {
+  username: string;
+  buyerApiKey?: string;
+}
+
+interface WalletBalance {
+  balance: number;
+  balanceFormatted: string;
+  budgetStatus: string;
+}
 
 export default function Header() {
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [locusApiKey, setLocusApiKey] = useState<string | null>(null);
-  const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [showSignupDialog, setShowSignupDialog] = useState(false);
   const [agentStatus, setAgentStatus] = useState<'idle' | 'active' | 'processing'>('idle');
+  const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
 
+  // Check auth status on mount
   useEffect(() => {
-    const savedKey = localStorage.getItem('locus_buyer_api_key');
-    const savedWallet = localStorage.getItem('wallet_address');
-    if (savedKey && savedWallet) {
-      setLocusApiKey(savedKey);
-      setWalletAddress(savedWallet);
-      setWalletConnected(true);
-    }
+    checkAuth();
   }, []);
+
+  // Fetch wallet balance when user has API key
+  useEffect(() => {
+    if (user?.buyerApiKey) {
+      fetchWalletBalance();
+      // Refresh balance every 30 seconds
+      const interval = setInterval(fetchWalletBalance, 30000);
+      return () => clearInterval(interval);
+    } else {
+      setWalletBalance(null);
+    }
+  }, [user?.buyerApiKey]);
+
+  const fetchWalletBalance = async () => {
+    if (!user?.buyerApiKey) return;
+    
+    try {
+      const response = await fetch('/api/wallet/balance');
+      if (response.ok) {
+        const data = await response.json();
+        setWalletBalance(data);
+      }
+    } catch (error) {
+      // Silently fail - don't show errors in header
+      console.error('Error fetching wallet balance:', error);
+    }
+  };
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -32,25 +78,33 @@ export default function Header() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleConnect = (apiKey: string) => {
-    const mockAddress = `0x${Array.from({ length: 40 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('')}`;
-    
-    localStorage.setItem('locus_buyer_api_key', apiKey);
-    localStorage.setItem('wallet_address', mockAddress);
-    
-    setLocusApiKey(apiKey);
-    setWalletAddress(mockAddress);
-    setWalletConnected(true);
+  const handleLoginSuccess = (userData: User) => {
+    setUser(userData);
+    setShowLoginDialog(false);
   };
 
-  const disconnectWallet = () => {
-    localStorage.removeItem('locus_buyer_api_key');
-    localStorage.removeItem('wallet_address');
-    setWalletAddress(null);
-    setLocusApiKey(null);
-    setWalletConnected(false);
+  const handleSignupSuccess = (userData: User) => {
+    setUser(userData);
+    setShowSignupDialog(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const switchToSignup = () => {
+    setShowLoginDialog(false);
+    setShowSignupDialog(true);
+  };
+
+  const switchToLogin = () => {
+    setShowSignupDialog(false);
+    setShowLoginDialog(true);
   };
 
   const getStatusColor = () => {
@@ -101,6 +155,14 @@ export default function Header() {
             >
               Agent Console
             </Link>
+            {user && (
+              <Link 
+                href="/settings" 
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Settings
+              </Link>
+            )}
           </nav>
 
           <div className="flex flex-1 items-center justify-end space-x-4">
@@ -111,46 +173,72 @@ export default function Header() {
               </Badge>
             </div>
 
-            {walletConnected ? (
+            {user ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2 text-sm">
-                  <Wallet className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {walletAddress?.substring(0, 6)}...{walletAddress?.substring(38)}
-                  </span>
-                  {locusApiKey && (
-                    <Badge variant="secondary" className="text-xs">
-                      Locus Active
-                    </Badge>
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">{user.username}</span>
+                  {user.buyerApiKey && (
+                    <>
+                      {walletBalance ? (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <Wallet className="h-3 w-3" />
+                          {walletBalance.balanceFormatted}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">
+                          <Wallet className="h-3 w-3 mr-1" />
+                          Wallet Ready
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={disconnectWallet}
-                  className="rounded-lg"
+                  onClick={handleLogout}
+                  className="gap-2 rounded-lg"
                 >
-                  Disconnect
+                  <LogOut className="h-4 w-4" />
+                  Logout
                 </Button>
               </div>
             ) : (
-              <Button
-                onClick={() => setShowConnectDialog(true)}
-                size="sm"
-                className="gap-2 rounded-lg"
-              >
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLoginDialog(true)}
+                  className="rounded-lg"
+                >
+                  Login
+                </Button>
+                <Button
+                  onClick={() => setShowSignupDialog(true)}
+                  size="sm"
+                  className="gap-2 rounded-lg"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Sign Up
+                </Button>
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      <WalletConnectDialog
-        open={showConnectDialog}
-        onOpenChange={setShowConnectDialog}
-        onConnect={handleConnect}
+      <LoginDialog
+        open={showLoginDialog}
+        onOpenChange={setShowLoginDialog}
+        onSuccess={handleLoginSuccess}
+        switchToSignup={switchToSignup}
+      />
+      <SignupDialog
+        open={showSignupDialog}
+        onOpenChange={setShowSignupDialog}
+        onSuccess={handleSignupSuccess}
+        switchToLogin={switchToLogin}
       />
     </>
   );

@@ -18,7 +18,7 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
   const [locusApiKey, setLocusApiKey] = useState('');
   const [error, setError] = useState('');
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!locusApiKey.trim()) {
       setError('Please enter your Locus Buyer API Key');
       return;
@@ -30,6 +30,11 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
     }
 
     setError('');
+    
+    // Store buyer agent's API key in localStorage
+    // API key must be manually created on Locus platform
+    localStorage.setItem('locus_buyer_api_key', locusApiKey);
+    
     onConnect(locusApiKey);
     onOpenChange(false);
     setLocusApiKey('');
@@ -44,7 +49,7 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
             Connect Wallet with Locus
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Enter your Locus Buyer API Key to enable autonomous payments for investments.
+            Enter your Locus Buyer Agent API Key. API keys must be manually created on the Locus platform.
           </DialogDescription>
         </DialogHeader>
 
@@ -52,8 +57,8 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
           <Alert className="rounded-xl border-border/50">
             <Info className="h-4 w-4" />
             <AlertDescription className="text-sm">
-              Your Locus Buyer API Key enables AI agents to autonomously send payments on Base Mainnet using USDC.
-              This key is stored locally in your browser and used for making investments.
+              Your Locus Buyer Agent API Key enables agent-to-agent payments on Base Mainnet using USDC.
+              API keys must be manually created on the Locus platform. This key is stored locally in your browser.
             </AlertDescription>
           </Alert>
 

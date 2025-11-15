@@ -30,7 +30,8 @@ export function getLocusMCPServers(apiKey: string) {
       type: 'http' as const,
       url: 'https://mcp.paywithlocus.com/mcp',
       headers: {
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json, text/event-stream',
       }
     }
   };

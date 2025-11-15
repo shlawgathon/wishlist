@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getListingById, subscribeToListingUpdates, unsubscribeFromListingUpdates } from '@/lib/listings-store';
+import { getListingById } from '@/lib/listings-store';
+import clientPromise from '@/lib/mongodb';
 
 export async function GET(
   request: NextRequest,
@@ -8,7 +9,7 @@ export async function GET(
   const { id } = await params;
 
   const readable = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const encoder = new TextEncoder();
       
       const sendEvent = (data: any, event = 'message') => {
@@ -20,42 +21,55 @@ export async function GET(
         }
       };
 
-      // Send initial data
-      const initialListing = getListingById(id);
-      if (initialListing) {
-        sendEvent({
-          type: 'initial',
-          data: initialListing,
-        }, 'listing-update');
+      try {
+        // Send initial data
+        const initialListing = await getListingById(id);
+        if (initialListing) {
+          sendEvent({ type: 'initial', data: initialListing }, 'listing-update');
+        }
+
+        // Set up MongoDB Change Stream for real-time updates
+        const client = await clientPromise;
+        const db = client.db('database');
+        const collection = db.collection('listings');
+
+        // Watch for changes to this specific listing
+        const changeStream = collection.watch(
+          [{ $match: { 'fullDocument.id': id } }],
+          { fullDocument: 'updateLookup' }
+        );
+
+        changeStream.on('change', (change: any) => {
+          if (change.fullDocument && change.fullDocument.id === id) {
+            sendEvent({ type: 'update', data: change.fullDocument }, 'listing-update');
+          }
+        });
+
+        changeStream.on('error', (error) => {
+          console.error('Change stream error:', error);
+          sendEvent({ type: 'error', error: error.message }, 'error');
+        });
+
+        // Send heartbeat to keep connection alive
+        const heartbeatInterval = setInterval(() => {
+          sendEvent({ type: 'heartbeat' }, 'heartbeat');
+        }, 30000); // Every 30 seconds
+
+        // Cleanup on abort
+        request.signal.onabort = () => {
+          clearInterval(heartbeatInterval);
+          changeStream.close();
+          try {
+            controller.close();
+          } catch (error) {
+            // Ignore errors on close
+          }
+        };
+      } catch (error) {
+        console.error('Error setting up change stream:', error);
+        sendEvent({ type: 'error', error: 'Failed to set up real-time updates' }, 'error');
+        controller.close();
       }
-
-      // Subscribe to updates
-      const listener = (updatedListing: any) => {
-        if (updatedListing.id === id) {
-          sendEvent({
-            type: 'update',
-            data: updatedListing,
-          }, 'listing-update');
-        }
-      };
-      
-      subscribeToListingUpdates(listener);
-
-      // Send heartbeat to keep connection alive
-      const heartbeatInterval = setInterval(() => {
-        sendEvent({ type: 'heartbeat' }, 'heartbeat');
-      }, 30000); // Every 30 seconds
-
-      // Cleanup on abort
-      request.signal.onabort = () => {
-        unsubscribeFromListingUpdates(listener);
-        clearInterval(heartbeatInterval);
-        try {
-          controller.close();
-        } catch (error) {
-          // Ignore errors on close
-        }
-      };
     },
     cancel() {
       // Cleanup on stream cancellation
@@ -67,8 +81,6 @@ export async function GET(
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // Disable buffering in nginx
     },
   });
 }
-

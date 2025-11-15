@@ -179,20 +179,22 @@ We believe in open-source technology and user privacy. All code will be availabl
 
 export default function ListingsPage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<ProjectListingType[]>(mockProjects);
+  const [projects, setProjects] = useState<ProjectListingType[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [filteredProjects, setFilteredProjects] = useState(mockProjects);
+  const [filteredProjects, setFilteredProjects] = useState<ProjectListingType[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch listings from API
-  useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        const response = await fetch('/api/listings/create');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.listings && data.listings.length > 0) {
+  const fetchListings = async () => {
+    try {
+      // Add cache-busting to ensure we get fresh data
+      const response = await fetch(`/api/listings/create?t=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.listings && data.listings.length > 0) {
             // Convert API listings to ProjectListingType format
             const apiListings: ProjectListingType[] = data.listings.map((listing: any) => ({
               id: listing.id,
@@ -206,25 +208,91 @@ export default function ListingsPage() {
               daysLeft: listing.daysLeft,
               category: listing.category,
               tiers: listing.tiers,
+              sellerWalletAddress: listing.sellerWalletAddress || listing.sellerWallet,
+              sellerEmail: listing.sellerEmail,
+              sellerApiKey: listing.sellerApiKey,
             }));
-            // Merge with mock projects (API listings first)
-            setProjects([...apiListings, ...mockProjects]);
-          } else {
-            // If no API listings, use mock projects
-            setProjects(mockProjects);
-          }
+          
+          // Don't include mock projects - they should be in the database if needed
+          // Filter out any remaining mock/test listings that might have slipped through
+          const filteredApiListings = apiListings.filter(listing => {
+            const mockIds = ['project-1', 'project-2', 'project-3'];
+            return !mockIds.includes(listing.id) && 
+                   !listing.name?.toLowerCase().includes('test');
+          });
+          
+          setProjects(filteredApiListings);
+        } else {
+          // If no API listings, show empty state
+          setProjects([]);
         }
-      } catch (error) {
-        console.error('Error fetching listings:', error);
-        // Fallback to mock projects on error
-        setProjects(mockProjects);
-      } finally {
-        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+      // Show empty state on error instead of mock projects
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchListings();
+  }, []);
+
+  // Refresh listings when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchListings();
       }
     };
 
-    fetchListings();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Sync wallet balances for all listings every 3 seconds
+  useEffect(() => {
+    if (projects.length === 0) return;
+
+    const syncAllBalances = async () => {
+      // Sync balances for all listings with wallet addresses
+      const syncPromises = projects
+        .filter((p: any) => p.sellerWalletAddress || p.sellerWallet)
+        .map(async (project: any) => {
+          try {
+            await fetch(`/api/listings/${project.id}/sync-balance`, {
+              method: 'POST',
+            });
+          } catch (error) {
+            // Silently fail for individual listings
+            console.debug(`Balance sync failed for ${project.id}:`, error);
+          }
+        });
+
+      await Promise.all(syncPromises);
+      
+      // Refresh listings after syncing to get updated amounts
+      // Only refresh if page is visible to avoid unnecessary requests
+      if (document.visibilityState === 'visible') {
+        fetchListings();
+      }
+    };
+
+    // Initial sync after 1 second
+    const initialTimeout = setTimeout(syncAllBalances, 1000);
+
+    // Poll every 3 seconds
+    const interval = setInterval(syncAllBalances, 3000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, [projects.length]); // Only re-run when number of projects changes
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -295,18 +363,23 @@ export default function ListingsPage() {
 
           {/* Projects Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => router.push(`/listings/${project.id}`)}
-                className="cursor-pointer"
-              >
-                <ProjectListing
-                  project={project}
-                  onBack={handleBack}
-                />
-              </div>
-            ))}
+            {filteredProjects.map((project, index) => {
+              // Generate unique key: use id + index for uniqueness (deduplication ensures no duplicate IDs)
+              // Add a random component to ensure uniqueness even if same ID appears
+              const uniqueKey = `${project.id}-${index}-${project.name?.substring(0, 3) || 'pro'}`;
+              return (
+                <div
+                  key={uniqueKey}
+                  onClick={() => router.push(`/listings/${project.id}`)}
+                  className="cursor-pointer"
+                >
+                  <ProjectListing
+                    project={project}
+                    onBack={handleBack}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {filteredProjects.length === 0 && (
