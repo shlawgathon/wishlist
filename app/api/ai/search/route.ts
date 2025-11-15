@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useLocusWithClaude } from '@/lib/claude-agent';
 import Anthropic from '@anthropic-ai/sdk';
+import { getAllListings } from '@/lib/listings-store';
+import { mockListings } from '@/lib/mock-listings';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,12 +24,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch all available listings (API + mock)
+    const apiListings = getAllListings();
+    // Use request URL to determine base URL dynamically
+    const protocol = request.headers.get('x-forwarded-proto') || 'http';
+    const host = request.headers.get('host') || 'localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+
+    const allListings = [
+      ...apiListings,
+      ...mockListings.map(mock => ({
+        ...mock,
+        sellerWallet: '',
+        sellerWalletId: '',
+        createdAt: Date.now(),
+      })),
+    ];
+
+    // Format listings for Claude with clickable links
+    const listingsInfo = allListings.map((listing) => ({
+      id: listing.id,
+      name: listing.name,
+      description: listing.description,
+      category: listing.category,
+      fundingGoal: listing.fundingGoal,
+      amountRaised: listing.amountRaised,
+      backers: listing.backers,
+      daysLeft: listing.daysLeft,
+      progress: ((listing.amountRaised / listing.fundingGoal) * 100).toFixed(1),
+      url: `${baseUrl}/listings/${listing.id}`,
+    }));
+
+    // Build context with available fundraisers
+    const listingsContext = listingsInfo.length > 0
+      ? `\n\nAvailable Fundraisers (always include clickable links):\n${listingsInfo.map((l) =>
+          `[${l.name}](${l.url}) - ${l.description} | $${l.amountRaised.toLocaleString()}/${l.fundingGoal.toLocaleString()} (${l.progress}% funded)`
+        ).join('\n')}`
+      : '\n\nNo fundraisers are currently available.';
+
     // If Locus API key is provided, use MCP integration
     if (locusApiKey) {
       try {
         const result = await useLocusWithClaude(
-          `You are an AI assistant for Wishlist, a crypto fundraising platform. Help the user with: ${query}. 
-          You can help them discover investment opportunities, analyze projects, or provide recommendations.`,
+          `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}\n\nUser query: ${query}\n\nInstructions: Be concise (under 100 words). ALWAYS suggest relevant fundraisers with clickable markdown links [Name](URL). Focus on specific fundraisers, not generic advice.`,
           anthropicApiKey,
           locusApiKey
         );
@@ -38,25 +77,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Standard Claude API call
+    // Standard Claude API call with listings context
     const client = new Anthropic({ apiKey: anthropicApiKey });
     const message = await client.messages.create({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1024,
+      max_tokens: 512,
       messages: [
         {
           role: 'user',
-          content: `You are an AI assistant for Wishlist, a crypto fundraising platform with AI-powered investment matching. 
-          Help the user with their query: ${query}
-          
-          You can help with:
-          - Discovering investment opportunities
-          - Analyzing projects and their potential
-          - Providing investment recommendations
-          - Explaining how the platform works
-          - Answering questions about crypto fundraising
-          
-          Be helpful, concise, and informative.`,
+          content: `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}
+
+          User query: ${query}
+
+          Instructions:
+          - Be VERY concise (under 100 words)
+          - ALWAYS suggest relevant fundraisers from the list above with clickable markdown links
+          - Format: [Project Name](URL) - brief description
+          - If multiple match, list 2-3 most relevant with links
+          - Skip generic advice - focus on specific fundraisers with clickable links
+          - Example: "Check out [Mechanical Keyboard Pro](URL) - premium keyboard with custom switches"`,
         },
       ],
     });

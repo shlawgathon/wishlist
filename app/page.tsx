@@ -21,8 +21,8 @@ export default function Home() {
             </p>
           </div>
 
-          {/* AI Search Bar */}
-          <div className="animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300 w-full">
+          {/* AI Search Bar - Full Chat Mode */}
+          <div className="animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300 w-full max-w-4xl mx-auto">
             <AISearchBar />
           </div>
 

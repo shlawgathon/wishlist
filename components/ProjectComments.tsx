@@ -1,20 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { MessageSquare, Send } from 'lucide-react';
-
-interface Comment {
-  id: string;
-  author: string;
-  avatar?: string;
-  content: string;
-  timestamp: number;
-}
+import { useCommentUpdates } from '@/hooks/useCommentUpdates';
 
 interface ProjectCommentsProps {
   projectId: string;
@@ -22,25 +15,9 @@ interface ProjectCommentsProps {
 }
 
 export default function ProjectComments({ projectId, fullView = false }: ProjectCommentsProps) {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const { comments } = useCommentUpdates(projectId);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadComments();
-  }, [projectId]);
-
-  const loadComments = async () => {
-    try {
-      const response = await fetch(`/api/listings/${projectId}/comments`);
-      if (response.ok) {
-        const data = await response.json();
-        setComments(data.comments || []);
-      }
-    } catch (error) {
-      console.error('Error loading comments:', error);
-    }
-  };
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +36,7 @@ export default function ProjectComments({ projectId, fullView = false }: Project
 
       if (response.ok) {
         setNewComment('');
-        loadComments();
+        // Comments will update automatically via SSE
       }
     } catch (error) {
       console.error('Error posting comment:', error);

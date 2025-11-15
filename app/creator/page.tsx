@@ -9,66 +9,114 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CheckCircle2 } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Plus, CheckCircle2, X } from 'lucide-react';
+import type { ProjectTier } from '@/types/project';
 
 export default function CreatorDashboard() {
   const [formData, setFormData] = useState({
-    title: '',
+    name: '',
     description: '',
+    fullDescription: '',
+    companyName: '',
+    companyBio: '',
+    companyWebsite: '',
     fundingGoal: '',
-    milestones: '',
+    daysLeft: '',
+    category: '',
+    sellerApiKey: '',
   });
+  const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
+    { name: '', description: '', amount: 0, rewards: [''] },
+  ]);
   const [loading, setLoading] = useState(false);
   const [createdProject, setCreatedProject] = useState<any>(null);
-  const [projects, setProjects] = useState<any[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
+
+  const addTier = () => {
+    setTiers([...tiers, { name: '', description: '', amount: 0, rewards: [''] }]);
+  };
+
+  const removeTier = (index: number) => {
+    setTiers(tiers.filter((_, i) => i !== index));
+  };
+
+  const updateTier = (index: number, field: keyof ProjectTier, value: any) => {
+    const updated = [...tiers];
+    if (field === 'rewards') {
+      updated[index] = { ...updated[index], rewards: value };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+    setTiers(updated);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await fetch('/api/projects/create', {
+      const response = await fetch('/api/listings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           fundingGoal: parseFloat(formData.fundingGoal),
-          milestones: formData.milestones.split(',').map(m => m.trim()).filter(m => m),
-          userId: 'user_' + Date.now(),
+          daysLeft: parseInt(formData.daysLeft),
+          tiers: tiers.map((tier, idx) => ({
+            ...tier,
+            id: `tier-${idx + 1}`,
+            amount: parseFloat(tier.amount.toString()),
+          })),
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create project');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create listing');
       }
 
       const data = await response.json();
       setCreatedProject(data.project);
-      setFormData({ title: '', description: '', fundingGoal: '', milestones: '' });
-      loadProjects();
+      
+      // Reset form
+      setFormData({
+        name: '',
+        description: '',
+        fullDescription: '',
+        companyName: '',
+        companyBio: '',
+        companyWebsite: '',
+        fundingGoal: '',
+        daysLeft: '',
+        category: '',
+        sellerApiKey: '',
+      });
+      setTiers([{ name: '', description: '', amount: 0, rewards: [''] }]);
+      loadListings();
     } catch (error) {
-      console.error('Error creating project:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create project';
-      alert(`Project creation failed: ${errorMessage}`);
+      console.error('Error creating listing:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create listing';
+      alert(`Listing creation failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProjects = async () => {
+  const loadListings = async () => {
     try {
-      const response = await fetch('/api/projects/create');
+      const response = await fetch('/api/listings/create');
       if (response.ok) {
         const data = await response.json();
-        setProjects(data.projects || []);
+        setListings(data.listings || []);
       }
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('Error loading listings:', error);
     }
   };
 
   useEffect(() => {
-    loadProjects();
+    loadListings();
   }, []);
 
   return (
@@ -85,129 +133,292 @@ export default function CreatorDashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Create New Project
+                Create New Project Listing
               </CardTitle>
               <CardDescription>
-                Launch a new fundraising campaign
+                Launch your fundraising campaign
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Project Title</Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    required
-                  />
-                </div>
+            <CardContent className="p-6">
+              <div className="h-[calc(100vh-16rem)] overflow-hidden">
+                <ScrollArea className="h-full w-full">
+                  <div className="pr-4">
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Project Name *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={4}
-                    required
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Short Description *</Label>
+                      <Textarea
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        rows={2}
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="fundingGoal">Funding Goal (USDC)</Label>
-                  <Input
-                    id="fundingGoal"
-                    type="number"
-                    value={formData.fundingGoal}
-                    onChange={(e) => setFormData({ ...formData, fundingGoal: e.target.value })}
-                    min="0"
-                    step="0.01"
-                    required
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="fullDescription">Full Description *</Label>
+                      <Textarea
+                        id="fullDescription"
+                        value={formData.fullDescription}
+                        onChange={(e) => setFormData({ ...formData, fullDescription: e.target.value })}
+                        rows={6}
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="milestones">Milestones (comma-separated)</Label>
-                  <Input
-                    id="milestones"
-                    value={formData.milestones}
-                    onChange={(e) => setFormData({ ...formData, milestones: e.target.value })}
-                    placeholder="e.g., Prototype, Beta, Launch"
-                  />
-                </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="fundingGoal">Funding Goal (USDC) *</Label>
+                        <Input
+                          id="fundingGoal"
+                          type="number"
+                          value={formData.fundingGoal}
+                          onChange={(e) => setFormData({ ...formData, fundingGoal: e.target.value })}
+                          min="0"
+                          required
+                        />
+                      </div>
 
-                <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? 'Creating...' : 'Create Project'}
-                </Button>
-              </form>
+                      <div className="space-y-2">
+                        <Label htmlFor="daysLeft">Days Left *</Label>
+                        <Input
+                          id="daysLeft"
+                          type="number"
+                          value={formData.daysLeft}
+                          onChange={(e) => setFormData({ ...formData, daysLeft: e.target.value })}
+                          min="1"
+                          required
+                        />
+                      </div>
+                    </div>
 
-              {createdProject && (
-                <div className="mt-6 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <h3 className="font-semibold text-green-800 dark:text-green-200">Project Created!</h3>
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Category *</Label>
+                      <Input
+                        id="category"
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sellerApiKey">Locus Seller API Key *</Label>
+                      <Input
+                        id="sellerApiKey"
+                        type="password"
+                        value={formData.sellerApiKey}
+                        onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
+                        placeholder="locus_dev_..."
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Your Locus seller API key for receiving payments. This will be used to create your seller wallet.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    Wallet: {createdProject.creatorWallet.substring(0, 10)}...
-                  </p>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    Project ID: {createdProject.id}
-                  </p>
-                </div>
-              )}
+
+                  {/* Company Profile */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base">Company Profile</h3>
+                    <div className="space-y-2">
+                      <Label htmlFor="companyName">Company Name *</Label>
+                      <Input
+                        id="companyName"
+                        value={formData.companyName}
+                        onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="companyBio">Company Bio *</Label>
+                      <Textarea
+                        id="companyBio"
+                        value={formData.companyBio}
+                        onChange={(e) => setFormData({ ...formData, companyBio: e.target.value })}
+                        rows={2}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="companyWebsite">Website (optional)</Label>
+                      <Input
+                        id="companyWebsite"
+                        type="url"
+                        value={formData.companyWebsite}
+                        onChange={(e) => setFormData({ ...formData, companyWebsite: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Funding Tiers */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-base">Funding Tiers</h3>
+                      <Button type="button" onClick={addTier} size="sm" variant="outline" className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add Tier
+                      </Button>
+                    </div>
+
+                    {tiers.map((tier, index) => (
+                      <div key={index} className="p-4 border rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">Tier {index + 1}</h4>
+                          {tiers.length > 1 && (
+                            <Button
+                              type="button"
+                              onClick={() => removeTier(index)}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Tier Name *</Label>
+                            <Input
+                              value={tier.name}
+                              onChange={(e) => updateTier(index, 'name', e.target.value)}
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Amount (USDC) *</Label>
+                            <Input
+                              type="number"
+                              value={tier.amount}
+                              onChange={(e) => updateTier(index, 'amount', parseFloat(e.target.value) || 0)}
+                              min="0"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Description *</Label>
+                          <Textarea
+                            value={tier.description}
+                            onChange={(e) => updateTier(index, 'description', e.target.value)}
+                            rows={2}
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Rewards (one per line) *</Label>
+                          <Textarea
+                            value={tier.rewards.join('\n')}
+                            onChange={(e) => updateTier(index, 'rewards', e.target.value.split('\n').filter(r => r.trim()))}
+                            rows={3}
+                            required
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button type="submit" disabled={loading} className="w-full">
+                    {loading ? 'Creating...' : 'Create Listing'}
+                  </Button>
+                </form>
+
+                {createdProject && (
+                  <div className="mt-6 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <h3 className="font-semibold text-green-800 dark:text-green-200">Listing Created!</h3>
+                    </div>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      Wallet: {createdProject.sellerWallet?.substring(0, 20)}...
+                    </p>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      Listing ID: {createdProject.id}
+                    </p>
+                  </div>
+                )}
+                  </div>
+                </ScrollArea>
+              </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>My Projects</CardTitle>
+              <CardTitle>My Listings</CardTitle>
               <CardDescription>
-                Track funding progress for your projects
+                Track funding progress for your listings
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {projects.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">No projects yet. Create one to get started!</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {projects.map((project) => {
-                    const progress = (project.currentFunding / project.fundingGoal) * 100;
-                    return (
-                      <div key={project.id} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold">{project.title}</h3>
+              <ScrollArea className="max-h-[calc(100vh-16rem)]">
+                {listings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">No listings yet. Create one to get started!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pr-4">
+                    {listings.map((listing) => {
+                      const progress = (listing.amountRaised / listing.fundingGoal) * 100;
+                      return (
+                        <div key={listing.id} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h3 className="font-semibold">{listing.name}</h3>
+                              <Badge variant="secondary" className="mt-1">{listing.category}</Badge>
+                            </div>
+                            {progress >= 100 && (
+                              <Badge variant="default" className="gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Funded
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {listing.description}
+                          </p>
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Progress</span>
+                              <span className="font-semibold">
+                                ${listing.amountRaised.toLocaleString()} / ${listing.fundingGoal.toLocaleString()}
+                              </span>
+                            </div>
+                            <Progress value={Math.min(progress, 100)} className="h-2" />
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{listing.backers} backers</span>
+                              <span>{listing.daysLeft} days left</span>
+                            </div>
+                          </div>
                           {progress >= 100 && (
-                            <Badge variant="default" className="gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Funded
-                            </Badge>
+                            <Button className="w-full" variant="default">
+                              Withdraw Funds
+                            </Button>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {project.description}
-                        </p>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Progress</span>
-                            <span className="font-semibold">
-                              ${project.currentFunding.toLocaleString()} / ${project.fundingGoal.toLocaleString()}
-                            </span>
-                          </div>
-                          <Progress value={Math.min(progress, 100)} className="h-2" />
-                        </div>
-                        {progress >= 100 && (
-                          <Button className="w-full" variant="default">
-                            Withdraw Funds
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>

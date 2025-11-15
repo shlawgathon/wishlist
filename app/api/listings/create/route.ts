@@ -17,22 +17,23 @@ export async function POST(request: NextRequest) {
       daysLeft,
       category,
       tiers,
+      sellerApiKey,
     } = body;
 
     // Validate required fields
-    if (!name || !description || !fullDescription || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers) {
+    if (!name || !description || !fullDescription || !companyName || !companyBio || !fundingGoal || !daysLeft || !category || !tiers || !sellerApiKey) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Get seller API key from env (for receiving payments)
-    const sellerApiKey = process.env.LOCUS_SELLER_API_KEY;
-    if (!sellerApiKey) {
+    // Use seller API key from request body (fallback to env for backward compatibility)
+    const finalSellerApiKey = sellerApiKey || process.env.LOCUS_SELLER_API_KEY;
+    if (!finalSellerApiKey) {
       return NextResponse.json(
-        { error: 'Seller API key not configured' },
-        { status: 500 }
+        { error: 'Seller API key is required' },
+        { status: 400 }
       );
     }
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       category,
       sellerWallet: sellerWallet.address,
       sellerWalletId: sellerWallet.walletId,
+      sellerApiKey: finalSellerApiKey, // Store seller API key for payment processing
       createdAt: Date.now(),
     };
 

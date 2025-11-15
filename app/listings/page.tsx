@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProjectListing from '@/components/ProjectListing';
 import { ProjectListing as ProjectListingType } from '@/types/project';
@@ -177,6 +178,7 @@ We believe in open-source technology and user privacy. All code will be availabl
 ];
 
 export default function ListingsPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectListingType[]>(mockProjects);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -207,10 +209,15 @@ export default function ListingsPage() {
             }));
             // Merge with mock projects (API listings first)
             setProjects([...apiListings, ...mockProjects]);
+          } else {
+            // If no API listings, use mock projects
+            setProjects(mockProjects);
           }
         }
       } catch (error) {
         console.error('Error fetching listings:', error);
+        // Fallback to mock projects on error
+        setProjects(mockProjects);
       } finally {
         setLoading(false);
       }
@@ -234,7 +241,7 @@ export default function ListingsPage() {
   }, [searchQuery, projects]);
 
   const handleBack = async (projectId: string, tierId: string, amount: number) => {
-    // Update project funding locally (API will update server-side)
+    // Update project funding locally (will be updated via real-time updates)
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id === projectId) {
@@ -247,6 +254,7 @@ export default function ListingsPage() {
         return p;
       })
     );
+    // Real-time updates will sync automatically via SSE
   };
 
   const handleCreateProject = (newProject: ProjectListingType) => {
@@ -288,11 +296,16 @@ export default function ListingsPage() {
           {/* Projects Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredProjects.map((project) => (
-              <ProjectListing
+              <div
                 key={project.id}
-                project={project}
-                onBack={handleBack}
-              />
+                onClick={() => router.push(`/listings/${project.id}`)}
+                className="cursor-pointer"
+              >
+                <ProjectListing
+                  project={project}
+                  onBack={handleBack}
+                />
+              </div>
             ))}
           </div>
 

@@ -26,6 +26,7 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
     fundingGoal: '',
     daysLeft: '',
     category: '',
+    sellerApiKey: '',
   });
   const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
     { name: '', description: '', amount: 0, rewards: [''] },
@@ -89,6 +90,7 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
         fundingGoal: '',
         daysLeft: '',
         category: '',
+        sellerApiKey: '',
       });
       setTiers([{ name: '', description: '', amount: 0, rewards: [''] }]);
       onOpenChange(false);
@@ -179,6 +181,21 @@ export default function CreateListingDialog({ open, onOpenChange, onCreate }: Cr
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sellerApiKey">Locus Seller API Key *</Label>
+              <Input
+                id="sellerApiKey"
+                type="password"
+                value={formData.sellerApiKey}
+                onChange={(e) => setFormData({ ...formData, sellerApiKey: e.target.value })}
+                placeholder="locus_dev_..."
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Your Locus seller API key for receiving payments. This will be used to create your seller wallet.
+              </p>
             </div>
           </div>
 

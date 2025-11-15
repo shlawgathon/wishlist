@@ -264,14 +264,64 @@ export async function useLocusWithClaude(
       canUseTool: canUseLocusTool,
     };
 
+    // Helper function to extract text from various result structures
+    function extractTextFromResult(result: any): string {
+      if (!result) return '';
+      
+      // If it's already a string
+      if (typeof result === 'string') {
+        // Check if it's a JSON-encoded string (starts and ends with quotes)
+        if (result.startsWith('"') && result.endsWith('"')) {
+          try {
+            return JSON.parse(result);
+          } catch {
+            return result;
+          }
+        }
+        return result;
+      }
+      
+      // Try various object structures
+      if (result.content?.[0]?.text) {
+        return result.content[0].text;
+      }
+      if (result.text) {
+        return result.text;
+      }
+      if (result.message) {
+        return result.message;
+      }
+      if (Array.isArray(result) && result[0]?.text) {
+        return result[0].text;
+      }
+      
+      // Last resort: convert to string without JSON.stringify to avoid quotes
+      return String(result);
+    }
+
     let finalResult: string = '';
     
     for await (const message of query({
       prompt,
       options
     })) {
+      // Handle different message types
       if (message.type === 'result' && message.subtype === 'success') {
-        finalResult = (message as any).result?.content?.[0]?.text || JSON.stringify((message as any).result);
+        const result = (message as any).result;
+        finalResult = extractTextFromResult(result);
+      } else if (message.type === 'text') {
+        // Direct text message
+        finalResult = (message as any).text || (message as any).content || '';
+      } else if (message.type === 'content' && (message as any).content) {
+        // Content block message
+        const content = (message as any).content;
+        if (typeof content === 'string') {
+          finalResult = content;
+        } else if (content?.text) {
+          finalResult = content.text;
+        } else if (Array.isArray(content) && content[0]?.text) {
+          finalResult = content[0].text;
+        }
       }
     }
 
