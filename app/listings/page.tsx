@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import ProjectListing, { ProjectListing as ProjectListingType } from '@/components/ProjectListing';
+import ProjectListing from '@/components/ProjectListing';
+import { ProjectListing as ProjectListingType } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Plus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
