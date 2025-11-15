@@ -174,6 +174,7 @@ export default function CreatorDashboard() {
   };
 
   const [currentUser, setCurrentUser] = useState<{ username: string } | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
     // Check auth status
@@ -183,9 +184,15 @@ export default function CreatorDashboard() {
         if (response.ok) {
           const data = await response.json();
           setCurrentUser(data.user);
+        } else {
+          // Not authenticated - redirect to home or show login prompt
+          setCurrentUser(null);
         }
       } catch (error) {
         console.error('Auth check error:', error);
+        setCurrentUser(null);
+      } finally {
+        setCheckingAuth(false);
       }
     };
     checkAuth();
@@ -213,6 +220,52 @@ export default function CreatorDashboard() {
     loadListings();
   }, [currentUser]);
 
+  // Show loading state while checking auth
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Require authentication - show login prompt if not authenticated
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8 max-w-2xl">
+          <Card>
+            <CardHeader>
+              <CardTitle>Authentication Required</CardTitle>
+              <CardDescription>
+                You must be logged in to access the Creator Dashboard
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                The Creator Dashboard allows you to create and manage your fundraising projects. 
+                All listings are linked to your account, so you need to be logged in to use this feature.
+              </p>
+              <div className="flex gap-4">
+                <Button onClick={() => router.push('/')} variant="outline">
+                  Go to Home
+                </Button>
+                <Button onClick={() => router.push('/')}>
+                  Login or Sign Up
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -578,7 +631,7 @@ export default function CreatorDashboard() {
                                         sellerEmail: listing.sellerEmail || '',
                                         sellerWalletAddress: listing.sellerWalletAddress || '',
                                       });
-                                      setTiers(listing.tiers.map(t => ({
+                                      setTiers(listing.tiers.map((t: any) => ({
                                         name: t.name,
                                         description: t.description,
                                         amount: t.amount,

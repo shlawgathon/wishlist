@@ -42,7 +42,8 @@ function generateWalletAddress(seed: string): string {
 }
 
 async function main() {
-  const client = new MongoClient(MONGODB_URI);
+  // TypeScript now knows MONGODB_URI is defined after the check above
+  const client = new MongoClient(MONGODB_URI as string);
   
   try {
     await client.connect();
@@ -56,7 +57,7 @@ async function main() {
     const existingListings = await listingsCollection.find({}).toArray();
     const existingIds = new Set(existingListings.map(l => l.id));
     
-    const sellerWalletAddress = generateWalletAddress(SELLER_API_KEY);
+    const sellerWalletAddress = generateWalletAddress(SELLER_API_KEY as string);
     console.log(`Using seller wallet address: ${sellerWalletAddress}`);
     
     let migrated = 0;
@@ -74,7 +75,7 @@ async function main() {
           ...mockListing,
           sellerWallet: sellerWalletAddress,
           sellerWalletId: `wallet_${mockListing.id}`,
-          sellerApiKey: SELLER_API_KEY,
+          sellerApiKey: SELLER_API_KEY as string,
           sellerWalletAddress: sellerWalletAddress,
           createdAt: Date.now(),
         };

@@ -163,6 +163,46 @@ This is an MVP implementation. In production, you would:
 - Enhance error handling and validation
 - Add comprehensive testing
 
+## Deployment
+
+### Deploy to Vercel
+
+1. **Push to Git**: Ensure your code is committed and pushed to GitHub/GitLab/Bitbucket
+
+2. **Connect to Vercel**:
+   - Go to https://vercel.com/new
+   - Import your repository
+   - Vercel will auto-detect Next.js
+
+3. **Set Environment Variables** in Vercel dashboard (Settings → Environment Variables):
+   - `MONGODB_URI` - Your MongoDB connection string
+   - `ANTHROPIC_API_KEY` - Claude AI API key
+   - `LOCUS_BUYER_API_KEY` - Locus buyer API key
+   - `LOCUS_SELLER_API_KEY` - Locus seller API key
+   - `X402_BAZAAR_ENDPOINT` - x402 Bazaar endpoint
+   - `NEXT_PUBLIC_APP_URL` - Your Vercel app URL (auto-set)
+   - `VOYAGE_API_KEY` - (Optional) Voyage AI for semantic search
+   - `CDP_API_KEY_NAME` - (Optional) Coinbase CDP key name
+   - `CDP_API_KEY_PRIVATE_KEY` - (Optional) Coinbase CDP private key
+   - `NETWORK` - Blockchain network (default: `base`)
+   - `BASE_RPC_URL` - Base RPC endpoint
+   - `AUTH_SALT` - Random string for password hashing
+
+4. **Deploy**: Click "Deploy" or push a new commit
+
+See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed deployment instructions.
+
+### Quick Deploy via CLI
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Login and deploy
+vercel login
+vercel --prod
+```
+
 ## License
 
 MIT

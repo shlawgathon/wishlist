@@ -50,16 +50,14 @@ export async function POST(request: NextRequest) {
         projectId: inv.projectId,
         amount: inv.amount,
         projectEndpoint: serviceMap.get(inv.projectId) || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/projects/${inv.projectId}`,
+        recipient: '', // Will be determined during payment execution
+        paymentMethod: 'x402' as const,
       })),
-      walletId,
-      walletConfig,
+      buyerApiKey: locusConfig.buyerApiKey,
     };
 
     // Execute batch investments using Locus
-    const result = await executeBatchInvestments(
-      investmentBatch,
-      locusConfig.buyerApiKey
-    );
+    const result = await executeBatchInvestments(investmentBatch);
 
     // Update agent memory
     result.results.forEach((paymentResult) => {

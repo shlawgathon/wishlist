@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createListing, getAllListings } from '@/lib/listings-store';
+import { createListing, getAllListings, type Listing } from '@/lib/listings-store';
 import { mockListings } from '@/lib/mock-listings';
 import { embedListing } from '@/lib/embeddings';
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Create listing with seller wallet info
-        const listing = {
+        const listing: Listing = {
           ...mockListing,
           sellerWallet: finalWalletAddress, // Legacy CDP wallet address
           sellerWalletId: `wallet_${mockListing.id}`, // Legacy CDP wallet ID

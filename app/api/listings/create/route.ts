@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create listing
-    const listing = {
+    const listing: Listing = {
       id: `listing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
       description,
