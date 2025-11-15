@@ -84,6 +84,12 @@ export default function Header() {
               Dashboard
             </Link>
             <Link 
+              href="/listings" 
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Listings
+            </Link>
+            <Link 
               href="/creator" 
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
