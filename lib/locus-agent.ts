@@ -18,7 +18,7 @@ export interface InvestmentBatch {
     recipient: string; // Can be API key, email, or wallet address
     paymentMethod: 'agent' | 'email' | 'wallet' | 'x402';
   }>;
-  buyerApiKey?: string; // Optional: Buyer agent's API key
+  buyerApiKey?: string; // Optional: Locus Wallet Agent API key (created when setting up agent in wallet)
 }
 
 export interface PaymentResult {
@@ -52,16 +52,17 @@ export interface LocusWalletInfo {
 /**
  * Initialize Locus payment agent with API key
  * 
- * Buyer API Key is used for making payments (investments)
- * Note: Agents can only send payments, not receive them. Only wallets can receive payments.
+ * Locus Wallet Agent API Key is used for making payments (investments)
+ * Note: When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
+ * Agents can only send payments, not receive them. Only wallets can receive payments.
  */
 export function initLocusAgent(config: {
   buyerApiKey?: string;
 }) {
   if (!config.buyerApiKey) {
-    console.warn('Locus buyer API key not provided, using mock mode');
+    console.warn('Locus Wallet Agent API key not provided, using mock mode');
   } else {
-    console.log('Locus buyer agent initialized');
+    console.log('Locus Wallet Agent initialized');
   }
   
   // Get MCP configuration if buyer API key is provided
@@ -282,7 +283,7 @@ function extractResult(result: any): any {
 async function sendLocusPayment(
   recipient: string, // Email address or wallet address (0x...)
   amount: string, // Amount in USDC smallest units (6 decimals)
-  senderApiKey: string, // Required: Buyer agent's API key
+  senderApiKey: string, // Required: Locus Wallet Agent API key
   paymentMethod: 'agent' | 'email' | 'wallet' | 'x402' = 'wallet',
   metadata?: Record<string, any>
 ): Promise<{ transactionHash: string }> {
@@ -424,7 +425,7 @@ async function sendLocusPayment(
  * @param amount - Payment amount in USDC
  * @param recipient - Recipient (API key, email, or wallet address)
  * @param paymentMethod - Payment method: 'agent', 'email', 'wallet', or 'x402'
- * @param buyerApiKey - Optional: Buyer agent's API key
+ * @param buyerApiKey - Optional: Locus Wallet Agent API key
  * @param projectEndpoint - Project API endpoint
  */
 export async function executePayment(
@@ -432,7 +433,7 @@ export async function executePayment(
   amount: number,
   recipient: string, // Can be API key, email, or wallet address
   paymentMethod: 'agent' | 'email' | 'wallet' | 'x402',
-  buyerApiKey?: string, // Optional: Buyer agent's API key
+  buyerApiKey?: string, // Optional: Locus Wallet Agent API key
   projectEndpoint?: string // Optional: For x402 payments
 ): Promise<PaymentResult> {
   try {
@@ -471,7 +472,7 @@ export async function executePayment(
           return {
             projectId,
             success: false,
-            error: 'Buyer API key is required for x402 payments',
+            error: 'Locus Wallet Agent API key is required for x402 payments. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.',
           };
         }
 
@@ -542,7 +543,7 @@ export async function executePayment(
           return {
             projectId,
             success: false,
-            error: 'Buyer API key is required for payments',
+            error: 'Locus Wallet Agent API key is required for payments. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.',
           };
         }
 
@@ -634,7 +635,7 @@ export async function executeBatchInvestments(
       investment.amount,
       investment.recipient, // Can be API key, email, or wallet address
       investment.paymentMethod, // Payment method
-      batch.buyerApiKey, // Optional: Buyer agent's API key
+      batch.buyerApiKey, // Optional: Locus Wallet Agent API key
       investment.paymentMethod === 'x402' ? investment.projectEndpoint : undefined
     );
 

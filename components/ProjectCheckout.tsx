@@ -27,6 +27,57 @@ export default function ProjectCheckout({
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [customAmount, setCustomAmount] = useState(tier.amount.toString());
+  const [coinbaseLoading, setCoinbaseLoading] = useState(false);
+
+  const handleCoinbasePay = async () => {
+    const amount = parseFloat(customAmount);
+    if (isNaN(amount) || amount < tier.amount) {
+      alert(`Minimum amount is $${tier.amount}`);
+      return;
+    }
+
+    setCoinbaseLoading(true);
+
+    try {
+      // Call API endpoint that uses Coinbase API key authentication
+      const response = await fetch('/api/listings/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          tierId: tier.id,
+          amount,
+          paymentMethod: 'coinbase',
+          recipient: project.sellerWalletAddress || '',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Payment failed' }));
+        throw new Error(errorData.error || errorData.details || 'Payment failed');
+      }
+
+      const data = await response.json();
+      setSuccess(true);
+      
+      if (onComplete) {
+        onComplete(project.id, tier.id, amount);
+      }
+
+      // Close after 2 seconds
+      setTimeout(() => {
+        onOpenChange(false);
+        setSuccess(false);
+        setCustomAmount(tier.amount.toString());
+      }, 2000);
+    } catch (error) {
+      console.error('Coinbase Pay error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Payment failed. Please try again.';
+      alert(`Coinbase Pay failed: ${errorMessage}`);
+    } finally {
+      setCoinbaseLoading(false);
+    }
+  };
   // Auto-select best available payment method (prioritize wallet > x402)
   // Note: sellerEmail is for contacting the creator, NOT for payments
   // Agents cannot receive payments, only wallets can
@@ -46,7 +97,7 @@ export default function ProjectCheckout({
     setLoading(true);
 
     try {
-      // Buyer API key is now stored in user session and retrieved automatically by the backend
+      // Locus Wallet Agent API key is now stored in user session and retrieved automatically by the backend
       // No need to pass it from the frontend
 
       // Quick checkout: Auto-select best available method if none selected
@@ -210,10 +261,42 @@ export default function ProjectCheckout({
                 </div>
               </div>
 
-              {/* Checkout Button */}
+              {/* Coinbase Pay Button */}
+              <Button
+                onClick={handleCoinbasePay}
+                disabled={coinbaseLoading || parseFloat(customAmount || '0') < tier.amount}
+                className="w-full gap-2 bg-[#0052FF] hover:bg-[#0040CC] text-white"
+                size="lg"
+              >
+                {coinbaseLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28H9.085l1.97-9.28h7.838z"/>
+                    </svg>
+                    Pay with Coinbase
+                  </>
+                )}
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
+              {/* Regular Checkout Button */}
               <Button
                 onClick={handleCheckout}
                 disabled={loading || parseFloat(customAmount || '0') < tier.amount}
+                variant="outline"
                 className="w-full gap-2"
                 size="lg"
               >
@@ -231,7 +314,7 @@ export default function ProjectCheckout({
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                Payment will be processed securely using Locus
+                Payment will be processed securely using Locus or Coinbase
               </p>
             </>
           )}

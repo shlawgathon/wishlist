@@ -20,7 +20,7 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
 
   const handleConnect = async () => {
     if (!locusApiKey.trim()) {
-      setError('Please enter your Locus Buyer API Key');
+      setError('Please enter your Locus Wallet Agent API Key');
       return;
     }
 
@@ -49,7 +49,7 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
             Connect Wallet with Locus
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Enter your Locus Buyer Agent API Key. API keys must be manually created on the Locus platform.
+            Enter your Locus Wallet Agent API Key. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
           </DialogDescription>
         </DialogHeader>
 
@@ -57,14 +57,15 @@ export default function WalletConnectDialog({ open, onOpenChange, onConnect }: W
           <Alert className="rounded-xl border-border/50">
             <Info className="h-4 w-4" />
             <AlertDescription className="text-sm">
-              Your Locus Buyer Agent API Key enables agent-to-agent payments on Base Mainnet using USDC.
-              API keys must be manually created on the Locus platform. This key is stored locally in your browser.
+              Your Locus Wallet Agent API Key enables agent-to-agent payments on Base Mainnet using USDC.
+              When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
+              This key is stored locally in your browser.
             </AlertDescription>
           </Alert>
 
           <div className="space-y-2">
             <Label htmlFor="locus-key" className="text-sm font-medium">
-              Locus Buyer API Key *
+              Locus Wallet Agent API Key *
             </Label>
             <Input
               id="locus-key"

@@ -102,7 +102,7 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="buyer-api-key">Locus Buyer API Key *</Label>
+            <Label htmlFor="buyer-api-key">Locus Wallet Agent API Key *</Label>
             <Input
               id="buyer-api-key"
               type="password"
@@ -112,7 +112,7 @@ export default function SignupDialog({ open, onOpenChange, onSuccess, switchToLo
               required
             />
             <p className="text-xs text-muted-foreground">
-              Your Locus buyer API key is required for account creation. Create one on the Locus platform before signing up.
+              Your Locus Wallet Agent API key is required for account creation. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
             </p>
           </div>
           {error && (

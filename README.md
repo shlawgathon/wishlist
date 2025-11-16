@@ -25,7 +25,7 @@ AI-powered crypto fundraising platform with autonomous investment matching using
 - API keys for:
   - Anthropic (Claude)
   - Coinbase CDP
-  - Locus (Buyer and Seller API Keys - Required for payments)
+  - Locus (Wallet Agent and Seller API Keys - Required for payments)
   - x402 Bazaar endpoint
 
 ### Installation
@@ -53,7 +53,8 @@ CDP_API_KEY_NAME=your_key_name
 CDP_API_KEY_PRIVATE_KEY=your_private_key
 
 # Locus API Keys (Required for payments)
-# Buyer API Key: Used for making payments (investments)
+# Wallet Agent API Key: Used for making payments (investments)
+# When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
 LOCUS_BUYER_API_KEY=locus_dev_MCkl3AYiHaJ2nMIZ76OUbyR2kbsTgUsm
 # Seller API Key: Used for receiving payments (project creators)
 LOCUS_SELLER_API_KEY=locus_dev_I1mtiYkoDe6_pLBJhgl3PZxmDEpXbGWP
@@ -65,7 +66,8 @@ NETWORK=base
 **Locus Integration**: 
 - Locus enables AI agents to autonomously send payments on Base Mainnet using USDC
 - Uses MCP (Model Context Protocol) for integration with Claude Agent SDK
-- Buyer API Key is used when making investments (backers)
+- Wallet Agent API Key is used when making investments (backers)
+  - When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff
 - Seller API Key is used when receiving payments (creators)
 - MCP Server: `https://mcp.paywithlocus.com/mcp`
 - Documentation: https://docs.payai.network/locus
@@ -177,13 +179,13 @@ This is an MVP implementation. In production, you would:
 3. **Set Environment Variables** in Vercel dashboard (Settings → Environment Variables):
    - `MONGODB_URI` - Your MongoDB connection string
    - `ANTHROPIC_API_KEY` - Claude AI API key
-   - `LOCUS_BUYER_API_KEY` - Locus buyer API key
+   - `LOCUS_BUYER_API_KEY` - Locus Wallet Agent API key (when creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff)
    - `LOCUS_SELLER_API_KEY` - Locus seller API key
    - `X402_BAZAAR_ENDPOINT` - x402 Bazaar endpoint
    - `NEXT_PUBLIC_APP_URL` - Your Vercel app URL (auto-set)
    - `VOYAGE_API_KEY` - (Optional) Voyage AI for semantic search
-   - `CDP_API_KEY_NAME` - (Optional) Coinbase CDP key name
-   - `CDP_API_KEY_PRIVATE_KEY` - (Optional) Coinbase CDP private key
+   - `CDP_API_KEY_NAME` - Coinbase CDP API key name (format: "organizations/{org_id}/apiKeys/{key_id}") - Required for Coinbase Pay
+   - `CDP_API_KEY_PRIVATE_KEY` - Coinbase CDP API private key (EC private key in PEM format, must use ECDSA/ES256, NOT Ed25519) - Required for Coinbase Pay
    - `NETWORK` - Blockchain network (default: `base`)
    - `BASE_RPC_URL` - Base RPC endpoint
    - `AUTH_SALT` - Random string for password hashing

@@ -11,35 +11,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 interface User {
   username: string;
   buyerApiKey?: string;
+  personalWalletAddress?: string;
 }
 
-interface WalletBalance {
+interface PersonalWalletBalance {
   balance: number;
   balanceFormatted: string;
-  budgetStatus: string;
-  contacts: Array<{ number: number; email: string }>;
+  walletAddress: string;
 }
 
 export default function SettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [buyerApiKey, setBuyerApiKey] = useState('');
+  const [personalWalletAddress, setPersonalWalletAddress] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
-  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [personalWalletBalance, setPersonalWalletBalance] = useState<PersonalWalletBalance | null>(null);
+  const [loadingPersonalBalance, setLoadingPersonalBalance] = useState(false);
 
   useEffect(() => {
     checkAuth();
   }, []);
 
   useEffect(() => {
-    if (user?.buyerApiKey) {
-      fetchWalletBalance();
+    if (user?.personalWalletAddress) {
+      fetchPersonalWalletBalance();
     }
-  }, [user?.buyerApiKey]);
+  }, [user?.personalWalletAddress]);
 
   const checkAuth = async () => {
     try {
@@ -48,6 +49,7 @@ export default function SettingsPage() {
         const data = await response.json();
         setUser(data.user);
         setBuyerApiKey(data.user.buyerApiKey || '');
+        setPersonalWalletAddress(data.user.personalWalletAddress || '');
       } else {
         router.push('/');
       }
@@ -59,23 +61,25 @@ export default function SettingsPage() {
     }
   };
 
-  const fetchWalletBalance = async () => {
-    if (!user?.buyerApiKey) return;
+  const fetchPersonalWalletBalance = async () => {
+    if (!user?.personalWalletAddress) return;
     
-    setLoadingBalance(true);
+    setLoadingPersonalBalance(true);
     try {
-      const response = await fetch('/api/wallet/balance');
+      const response = await fetch('/api/wallet/personal-balance');
       if (response.ok) {
         const data = await response.json();
-        setWalletBalance(data);
+        setPersonalWalletBalance(data);
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to fetch balance:', errorData.error);
+        console.error('Failed to fetch personal wallet balance:', errorData.error);
+        setPersonalWalletBalance(null);
       }
     } catch (error) {
-      console.error('Error fetching wallet balance:', error);
+      console.error('Error fetching personal wallet balance:', error);
+      setPersonalWalletBalance(null);
     } finally {
-      setLoadingBalance(false);
+      setLoadingPersonalBalance(false);
     }
   };
 
@@ -86,30 +90,49 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const response = await fetch('/api/auth/update-buyer-key', {
+      // Update buyer API key
+      const apiKeyResponse = await fetch('/api/auth/update-buyer-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ buyerApiKey: buyerApiKey.trim() || undefined }),
       });
 
-      const data = await response.json();
+      const apiKeyData = await apiKeyResponse.json();
 
-      if (!response.ok) {
-        setError(data.error || 'Failed to update buyer API key');
+      if (!apiKeyResponse.ok) {
+        setError(apiKeyData.error || 'Failed to update Locus Wallet Agent API key');
         return;
       }
 
-      setUser(data.user);
-      setSuccess('Buyer API key updated successfully!');
+      // Update personal wallet address
+      const walletResponse = await fetch('/api/auth/update-personal-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personalWalletAddress: personalWalletAddress.trim() || undefined }),
+      });
+
+      const walletData = await walletResponse.json();
+
+      if (!walletResponse.ok) {
+        setError(walletData.error || 'Failed to update personal wallet address');
+        return;
+      }
+
+      // Update user state with both responses
+      setUser({
+        ...apiKeyData.user,
+        personalWalletAddress: walletData.user.personalWalletAddress,
+      });
+      setSuccess('Settings updated successfully!');
       
-      // Refresh wallet balance if API key was added/updated
-      if (data.user.buyerApiKey) {
-        await fetchWalletBalance();
+      // Refresh personal wallet balance
+      if (walletData.user.personalWalletAddress) {
+        await fetchPersonalWalletBalance();
       } else {
-        setWalletBalance(null);
+        setPersonalWalletBalance(null);
       }
     } catch (error) {
-      setError('Failed to update buyer API key. Please try again.');
+      setError('Failed to update settings. Please try again.');
       console.error('Update error:', error);
     } finally {
       setSaving(false);
@@ -145,35 +168,23 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground mt-1">{user?.username}</p>
               </div>
 
-              {/* Wallet Balance */}
-              {user?.buyerApiKey && (
+              {/* Personal Wallet Balance */}
+              {user?.personalWalletAddress && (
                 <div className="p-4 rounded-lg border bg-muted/50">
-                  <Label className="text-sm font-medium mb-2 block">Wallet Balance</Label>
-                  {loadingBalance ? (
+                  <Label className="text-sm font-medium mb-2 block">Personal Wallet Balance</Label>
+                  {loadingPersonalBalance ? (
                     <p className="text-sm text-muted-foreground">Loading...</p>
-                  ) : walletBalance ? (
+                  ) : personalWalletBalance ? (
                     <div className="space-y-2">
-                      <p className="text-2xl font-bold">{walletBalance.balanceFormatted}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Status: {walletBalance.budgetStatus}
+                      <p className="text-2xl font-bold">{personalWalletBalance.balanceFormatted}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {personalWalletBalance.walletAddress.substring(0, 6)}...{personalWalletBalance.walletAddress.substring(38)}
                       </p>
-                      {walletBalance.contacts.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs font-medium mb-1">Whitelisted Contacts:</p>
-                          <ul className="text-xs text-muted-foreground space-y-1">
-                            {walletBalance.contacts.map((contact) => (
-                              <li key={contact.number}>
-                                {contact.number}. {contact.email}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={fetchWalletBalance}
+                        onClick={fetchPersonalWalletBalance}
                         className="mt-2"
                       >
                         Refresh Balance
@@ -187,7 +198,7 @@ export default function SettingsPage() {
 
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="buyer-api-key">Buyer API Key</Label>
+                  <Label htmlFor="buyer-api-key">Locus Wallet Agent API Key</Label>
                   <Input
                     id="buyer-api-key"
                     type="text"
@@ -196,7 +207,21 @@ export default function SettingsPage() {
                     placeholder="locus_dev_... or locus_..."
                   />
                   <p className="text-xs text-muted-foreground">
-                    Your Locus buyer API key for making payments. This key is stored securely and used automatically when you make investments.
+                    Your Locus Wallet Agent API key for making payments. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff. This key is stored securely and used automatically when you make investments.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="personal-wallet-address">Personal Wallet Address</Label>
+                  <Input
+                    id="personal-wallet-address"
+                    type="text"
+                    value={personalWalletAddress}
+                    onChange={(e) => setPersonalWalletAddress(e.target.value)}
+                    placeholder="0x..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your personal wallet address (Base network) to view USDC balance. This is optional and only used for displaying your wallet balance.
                   </p>
                 </div>
 

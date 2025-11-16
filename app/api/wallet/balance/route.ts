@@ -22,10 +22,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get buyer API key from user
+    // Get Locus Wallet Agent API key from user
     if (!user.buyerApiKey) {
       return NextResponse.json(
-        { error: 'Buyer API key not configured. Please add your Locus API key in settings.' },
+        { error: 'Locus Wallet Agent API key not configured. Please add your Locus Wallet Agent API key in settings. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.' },
         { status: 400 }
       );
     }
@@ -38,54 +38,63 @@ export async function GET(request: NextRequest) {
     );
 
     // Parse the result (it's a string with formatted text)
-    let balance = '0.00';
+    // According to https://docs.paywithlocus.com/mcp-spec, get_payment_context returns:
+    // - Budget Status
+    // - Available Balance (this is the spending limit, not a balance)
+    // - Whitelisted contacts
+    // - Payment capabilities
+    let limit = '0.00';
     let budgetStatus = 'Unknown';
     const contacts: Array<{ number: number; email: string }> = [];
+    let rawText = '';
 
     if (typeof result === 'string') {
-      // Parse the text response
-      const balanceMatch = result.match(/Available Balance:\s*([\d.]+)\s*USDC/i);
+      rawText = result;
+    } else if (result.content && Array.isArray(result.content)) {
+      // Handle content array format
+      const textContent = result.content.find((c: any) => c.type === 'text');
+      if (textContent?.text) {
+        rawText = textContent.text;
+      }
+    }
+
+    if (rawText) {
+      // Parse Available Balance (this is the spending limit)
+      const balanceMatch = rawText.match(/Available Balance:\s*([\d.]+)\s*USDC/i);
       if (balanceMatch) {
-        balance = balanceMatch[1];
+        limit = balanceMatch[1];
       }
 
-      const statusMatch = result.match(/Budget Status:\s*(\w+)/i);
+      // Parse Budget Status
+      const statusMatch = rawText.match(/Budget Status:\s*(\w+)/i);
       if (statusMatch) {
         budgetStatus = statusMatch[1];
+      }
+
+      // Try to parse limit/budget from other possible formats
+      const limitMatch = rawText.match(/(?:Limit|Budget|Max|Maximum):\s*([\d.]+)\s*USDC/i);
+      if (limitMatch && !balanceMatch) {
+        limit = limitMatch[1];
       }
 
       // Parse whitelisted contacts
       const contactRegex = /(\d+)\.\s*([^\s(]+)\s*\(([^)]+)\)/g;
       let match;
-      while ((match = contactRegex.exec(result)) !== null) {
+      while ((match = contactRegex.exec(rawText)) !== null) {
         contacts.push({
           number: parseInt(match[1]),
           email: match[2],
         });
       }
-    } else if (result.content && Array.isArray(result.content)) {
-      // Handle content array format
-      const textContent = result.content.find((c: any) => c.type === 'text');
-      if (textContent?.text) {
-        const text = textContent.text;
-        const balanceMatch = text.match(/Available Balance:\s*([\d.]+)\s*USDC/i);
-        if (balanceMatch) {
-          balance = balanceMatch[1];
-        }
-
-        const statusMatch = text.match(/Budget Status:\s*(\w+)/i);
-        if (statusMatch) {
-          budgetStatus = statusMatch[1];
-        }
-      }
     }
 
     return NextResponse.json({
-      balance: parseFloat(balance),
-      balanceFormatted: `$${balance} USDC`,
+      limit: parseFloat(limit),
+      limitFormatted: `$${limit} USDC`,
       budgetStatus,
       contacts,
       raw: result,
+      rawText,
     });
   } catch (error) {
     console.error('Error fetching wallet balance:', error);

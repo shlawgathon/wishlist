@@ -7,7 +7,7 @@ import { getListingById } from '@/lib/listings-store';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user (required for buyer API key)
+    // Get authenticated user (required for Locus Wallet Agent API key)
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buyer API key is required (agents can send, wallets receive)
+    // Locus Wallet Agent API key is required (agents can send, wallets receive)
     if (!user.buyerApiKey) {
       return NextResponse.json(
-        { error: 'Buyer API key is required. Please add your Locus buyer API key in your account settings.' },
+        { error: 'Locus Wallet Agent API key is required. Please add your Locus Wallet Agent API key in your account settings. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.' },
         { status: 400 }
       );
     }
@@ -70,10 +70,10 @@ export async function POST(request: NextRequest) {
 
     const investmentDetails = await Promise.all(investmentPromises);
 
-    // Prepare investment batch with buyer's API key from account
+    // Prepare investment batch with Locus Wallet Agent API key from account
     const investmentBatch = {
       investments: investmentDetails,
-      buyerApiKey: user.buyerApiKey, // Always use buyer's account API key
+      buyerApiKey: user.buyerApiKey, // Always use Locus Wallet Agent API key from account
     };
 
     // Execute batch investments using Locus

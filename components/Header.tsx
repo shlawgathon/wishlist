@@ -153,7 +153,7 @@ export default function Header() {
               href="/agent" 
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-              Agent Console
+              Chat History
             </Link>
             {user && (
               <Link 

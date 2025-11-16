@@ -1,257 +1,566 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Sparkles, Play, Zap } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sparkles, MessageSquare, Plus, Trash2, Loader2 } from 'lucide-react';
+import AISearchBar from '@/components/AISearchBar';
 
-interface ActivityLog {
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
   timestamp: number;
-  action: string;
-  details: string;
-  status: 'success' | 'error' | 'pending';
+}
+
+interface ChatHistory {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Generate a title from the first user message
+function generateTitle(firstMessage: string): string {
+  if (!firstMessage) return 'New Chat';
+  const trimmed = firstMessage.trim();
+  if (trimmed.length > 50) {
+    return trimmed.substring(0, 50) + '...';
+  }
+  return trimmed;
 }
 
 export default function AgentConsole() {
-  const [budget, setBudget] = useState('100');
-  const [preferences, setPreferences] = useState('');
-  const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
-  const [isActive, setIsActive] = useState(false);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [allocations, setAllocations] = useState<any[]>([]);
+  const [chatHistories, setChatHistories] = useState<ChatHistory[]>([]);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const isInitialLoadRef = useRef(true);
+  const hasSavedOnExitRef = useRef(false);
 
-  const addLog = (action: string, details: string, status: ActivityLog['status'] = 'success') => {
-    setActivityLog(prev => [{
+  // Load chat histories from MongoDB
+  const loadChatHistories = useCallback(async () => {
+    try {
+      // Only show loading on initial load
+      if (isInitialLoadRef.current) {
+        setLoading(true);
+        isInitialLoadRef.current = false;
+      }
+      
+      const response = await fetch('/api/chat/histories');
+      if (response.ok) {
+        const data = await response.json();
+        const histories = data.histories || [];
+        
+        setChatHistories((prevHistories) => {
+          // Only update if histories actually changed
+          const currentIds = prevHistories.map(c => c.id).sort().join(',');
+          const newIds = histories.map((c: ChatHistory) => c.id).sort().join(',');
+          
+          if (currentIds !== newIds || prevHistories.length === 0) {
+            return histories;
+          }
+          
+          // Check if any chat was updated
+          const hasUpdates = histories.some((newChat: ChatHistory) => {
+            const oldChat = prevHistories.find(c => c.id === newChat.id);
+            if (!oldChat) return true;
+            return oldChat.updatedAt !== newChat.updatedAt || 
+                   oldChat.messages.length !== newChat.messages.length ||
+                   oldChat.title !== newChat.title;
+          });
+          
+          return hasUpdates ? histories : prevHistories;
+        });
+        
+        // Select the most recent chat if available and no chat is selected
+        setSelectedChatId((prevId) => {
+          if (!prevId && histories.length > 0) {
+            const mostRecent = histories.sort((a: ChatHistory, b: ChatHistory) => b.updatedAt - a.updatedAt)[0];
+            return mostRecent.id;
+          }
+          return prevId;
+        });
+      } else if (response.status === 401) {
+        // Not authenticated - this is a valid state, just set empty array
+        setChatHistories([]);
+        setSelectedChatId(null);
+      } else {
+        // Only log actual errors (500, etc.), not expected states
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to load chat histories:', response.status, errorData);
+      }
+    } catch (error) {
+      // Only log unexpected network errors
+      console.error('Error loading chat histories:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setIsMounted(true);
+    loadChatHistories();
+    
+    // Poll for chat history updates every 2 seconds to sync with AISearchBar
+    const interval = setInterval(() => {
+      loadChatHistories();
+    }, 2000);
+    
+    return () => clearInterval(interval);
+  }, [loadChatHistories]);
+
+  const createNewChat = async () => {
+    const newChat: ChatHistory = {
+      id: `chat_${Date.now()}`,
+      title: 'New Chat',
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    try {
+      const response = await fetch('/api/chat/histories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newChat),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const createdChat = data.chat;
+        const updated = [createdChat, ...chatHistories];
+        setChatHistories(updated);
+        setSelectedChatId(createdChat.id);
+        console.log('New chat created in MongoDB:', createdChat.id);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to create chat:', response.status, errorData);
+        // Still add to local state even if MongoDB save fails
+        const updated = [newChat, ...chatHistories];
+        setChatHistories(updated);
+        setSelectedChatId(newChat.id);
+      }
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      // Still add to local state even if MongoDB save fails
+      const updated = [newChat, ...chatHistories];
+      setChatHistories(updated);
+      setSelectedChatId(newChat.id);
+    }
+  };
+
+  const deleteChat = async (chatId: string) => {
+    // Delete immediately without confirmation
+    try {
+      const response = await fetch(`/api/chat/histories/${chatId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const updated = chatHistories.filter(chat => chat.id !== chatId);
+        setChatHistories(updated);
+        
+        if (selectedChatId === chatId) {
+          if (updated.length > 0) {
+            setSelectedChatId(updated[0].id);
+          } else {
+            setSelectedChatId(null);
+          }
+        }
+      } else {
+        console.error('Failed to delete chat');
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+    }
+  };
+
+  const updateChatMessages = useCallback(async (chatId: string, messages: ChatMessage[]) => {
+    // Find the chat to get current title
+    setChatHistories(prevHistories => {
+      const currentChat = prevHistories.find(chat => chat.id === chatId);
+      if (!currentChat) {
+        console.warn('Chat not found for update:', chatId);
+        return prevHistories;
+      }
+
+      // Generate title from first user message if title is still "New Chat"
+      let title = currentChat.title;
+      if (title === 'New Chat' && messages.length > 0) {
+        const firstUserMessage = messages.find(m => m.role === 'user');
+        if (firstUserMessage) {
+          title = generateTitle(firstUserMessage.content);
+        }
+      }
+
+      // Update local state immediately for responsive UI
+      const updated = prevHistories.map(chat => {
+        if (chat.id === chatId) {
+          return {
+            ...chat,
+            title,
+            messages,
+            updatedAt: Date.now(),
+          };
+        }
+        return chat;
+      });
+
+      // Don't save to MongoDB on every message change - only save on exit
+      // The chat will be saved when the user leaves the page
+
+      return updated;
+    });
+  }, []);
+
+  const selectedChat = chatHistories.find(chat => chat.id === selectedChatId);
+
+  if (!isMounted || loading) {
+    return <div className="space-y-6">Loading...</div>;
+  }
+
+  return (
+    <div className="flex gap-6 h-[calc(100vh-12rem)] min-h-0">
+      {/* Chat Histories Sidebar */}
+      <Card className="w-80 flex-shrink-0 flex flex-col h-full min-h-0">
+        <CardHeader className="flex-shrink-0 pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Chat Histories
+            </CardTitle>
+            <Button
+              onClick={createNewChat}
+              size="sm"
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </Button>
+          </div>
+          <CardDescription>
+            {chatHistories.length} {chatHistories.length === 1 ? 'chat' : 'chats'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 min-h-0 overflow-hidden p-0 relative">
+          <ScrollArea className="absolute inset-0">
+            <div className="p-4 space-y-2" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+              {chatHistories.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm">No chat histories yet</p>
+                  <p className="text-xs mt-2">Create a new chat to get started</p>
+                </div>
+              ) : (
+                chatHistories
+                  .sort((a, b) => b.updatedAt - a.updatedAt)
+                  .map((chat) => (
+                    <div
+                      key={chat.id}
+                      className={`group relative rounded-lg border cursor-pointer transition-all ${
+                        selectedChatId === chat.id
+                          ? 'bg-primary/10 border-primary'
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                      style={{ 
+                        padding: '12px',
+                        width: '100%',
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        overflow: 'hidden'
+                      }}
+                      onClick={() => setSelectedChatId(chat.id)}
+                    >
+                      <div className="flex items-start justify-between gap-2" style={{ minWidth: 0, width: '100%' }}>
+                        <div className="flex-1 min-w-0" style={{ minWidth: 0, overflow: 'hidden', maxWidth: 'calc(100% - 32px)' }}>
+                          <p className="font-medium text-sm truncate" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {chat.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1 truncate">
+                            {chat.messages.length} {chat.messages.length === 1 ? 'message' : 'messages'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1 truncate">
+                            {new Date(chat.updatedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 flex-shrink-0"
+                          style={{ flexShrink: 0, minWidth: '24px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteChat(chat.id);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      {/* Chat View */}
+      <Card className="flex-1 flex flex-col">
+        <CardHeader className="flex-shrink-0">
+          <CardTitle>
+            {selectedChat ? selectedChat.title : 'Select a chat'}
+          </CardTitle>
+          <CardDescription>
+            {selectedChat
+              ? `${selectedChat.messages.length} ${selectedChat.messages.length === 1 ? 'message' : 'messages'}`
+              : 'Choose a chat from the sidebar to view messages'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden p-0">
+          {selectedChat ? (
+            <ChatView
+              chat={selectedChat}
+              onMessagesChange={(messages) => updateChatMessages(selectedChat.id, messages)}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-center p-8">
+              <div>
+                <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">No chat selected</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Create a new chat or select one from the sidebar
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface ChatViewProps {
+  chat: ChatHistory;
+  onMessagesChange: (messages: ChatMessage[]) => void;
+}
+
+function ChatView({ chat, onMessagesChange }: ChatViewProps) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>(chat.messages);
+  const prevChatIdRef = useRef<string>(chat.id);
+  const onMessagesChangeRef = useRef(onMessagesChange);
+  const prevMessagesRef = useRef<ChatMessage[]>(chat.messages);
+
+  // Keep callback ref up to date
+  useEffect(() => {
+    onMessagesChangeRef.current = onMessagesChange;
+  }, [onMessagesChange]);
+
+  // Sync messages when chat changes
+  useEffect(() => {
+    if (prevChatIdRef.current !== chat.id) {
+      setMessages(chat.messages);
+      prevChatIdRef.current = chat.id;
+      prevMessagesRef.current = chat.messages;
+    }
+  }, [chat.id, chat.messages]);
+
+  // Notify parent when messages change (but avoid infinite loop)
+  useEffect(() => {
+    // Only update if messages actually changed and we're on the same chat
+    if (prevChatIdRef.current === chat.id) {
+      const messagesChanged = JSON.stringify(messages) !== JSON.stringify(prevMessagesRef.current);
+      if (messagesChanged) {
+        prevMessagesRef.current = messages;
+        // Call the update function to save to MongoDB
+        onMessagesChangeRef.current(messages);
+      }
+    }
+  }, [messages, chat.id]);
+
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+
+    const userMessage: ChatMessage = {
+      id: `msg_${Date.now()}_user`,
+      role: 'user',
+      content: query,
       timestamp: Date.now(),
-      action,
-      details,
-      status,
-    }, ...prev]);
-  };
+    };
 
-  const handleStartMatching = async () => {
-    if (!budget || !preferences) {
-      alert('Please set budget and preferences');
-      return;
-    }
-
-    setIsActive(true);
-    addLog('Agent Started', 'Beginning investment matching process', 'pending');
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    setLoading(true);
+    const currentQuery = query;
+    setQuery('');
 
     try {
-      const response = await fetch('/api/agent/match', {
+      const locusApiKey = localStorage.getItem('locus_buyer_api_key');
+
+      const response = await fetch('/api/ai/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          budget: parseFloat(budget),
-          preferences,
+          query: currentQuery,
+          locusApiKey: locusApiKey || undefined,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to match investments');
+        throw new Error('Search failed');
       }
 
       const data = await response.json();
-      setRecommendations(data.recommendations || []);
-      setAllocations(data.allocations || []);
-      
-      const totalAllocated = data.allocations.reduce((sum: number, a: { amount: number }) => sum + a.amount, 0);
-      addLog(
-        'Matching Complete',
-        `Found ${data.totalProjects} projects, allocated $${totalAllocated.toFixed(2)}`,
-        'success'
-      );
+      const result = data.result || data.message || 'No results found';
+
+      const assistantMessage: ChatMessage = {
+        id: `msg_${Date.now()}_assistant`,
+        role: 'assistant',
+        content: result,
+        timestamp: Date.now(),
+      };
+
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
     } catch (error) {
-      addLog('Matching Failed', error instanceof Error ? error.message : 'Unknown error', 'error');
+      console.error('Search error:', error);
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}_error`,
+        role: 'assistant',
+        content: 'Error: Failed to process search. Please try again.',
+        timestamp: Date.now(),
+      };
+      const finalMessages = [...updatedMessages, errorMessage];
+      setMessages(finalMessages);
     } finally {
-      setIsActive(false);
+      setLoading(false);
     }
   };
 
-  const handleExecuteInvestments = async () => {
-    if (allocations.length === 0) {
-      alert('No investments to execute. Run matching first.');
-      return;
-    }
-
-    setIsActive(true);
-    addLog('Executing Investments', `Processing ${allocations.length} investments`, 'pending');
-
-    try {
-      const walletId = 'wallet_mock_' + Date.now();
-      const response = await fetch('/api/invest/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          investments: allocations,
-          walletId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to execute investments');
-      }
-
-      const data = await response.json();
-      addLog(
-        'Investments Executed',
-        `Successfully invested in ${data.summary.successful} projects. Total: $${data.summary.totalInvested.toFixed(2)}`,
-        'success'
-      );
-      
-      setAllocations([]);
-    } catch (error) {
-      addLog('Investment Failed', error instanceof Error ? error.message : 'Unknown error', 'error');
-    } finally {
-      setIsActive(false);
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !loading) {
+      handleSearch();
     }
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Budget Settings</CardTitle>
-          <CardDescription>Configure your investment budget</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="budget">Total Budget (USDC)</Label>
-              <Input
-                id="budget"
-                type="number"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder="100"
-                min="0"
-                step="0.01"
-              />
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <ScrollArea className="flex-1 p-4">
+        <div className="space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
+                <Sparkles className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Start a conversation</h3>
+              <p className="text-sm text-muted-foreground max-w-md">
+                Ask me about investment opportunities, project recommendations, or get help finding the perfect fundraiser for you.
+              </p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Preference Tuning</CardTitle>
-          <CardDescription>Describe your investment preferences in natural language</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="preferences">Investment Preferences</Label>
-              <Textarea
-                id="preferences"
-                value={preferences}
-                onChange={(e) => setPreferences(e.target.value)}
-                rows={4}
-                placeholder="e.g., $50 for keyboard projects, $100 for drone development"
-              />
-            </div>
-            <Button
-              onClick={handleStartMatching}
-              disabled={isActive}
-              className="w-full gap-2"
-            >
-              <Play className="h-4 w-4" />
-              {isActive ? 'Matching...' : 'Start AI Matching'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {recommendations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              AI Recommendations
-            </CardTitle>
-            <CardDescription>
-              Projects matched to your preferences
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-              {recommendations.map((rec) => (
-                <div key={rec.projectId} className="border rounded-lg p-3 space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p className="font-semibold text-sm">{rec.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{rec.matchReason}</p>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {message.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 mt-1">
+                      <Sparkles className="h-4 w-4 text-white" />
                     </div>
-                    <div className="text-right space-y-1">
-                      <Badge variant="secondary" className="gap-1">
-                        <Sparkles className="h-3 w-3" />
-                        {rec.score}
-                      </Badge>
-                      <p className="text-xs font-semibold text-green-600 dark:text-green-400">
-                        ${rec.suggestedAmount?.toFixed(2) || '0.00'}
-                      </p>
-                    </div>
+                  )}
+                  <div
+                    className={`max-w-[75%] rounded-2xl p-4 ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    {message.role === 'assistant' ? (
+                      <div
+                        className="text-sm whitespace-pre-wrap break-words prose prose-sm dark:prose-invert max-w-none"
+                        dangerouslySetInnerHTML={{
+                          __html: message.content
+                            .replace(/\n\n+/g, '<br /><br />')
+                            .replace(/\n/g, '<br />')
+                            .replace(
+                              /\[([^\]]+)\]\(([^)]+)\)/g,
+                              '<a href="$2" class="text-primary hover:underline font-medium" target="_blank" rel="noopener noreferrer">$1</a>'
+                            )
+                            .replace(/##\s+/g, '<strong class="text-base">')
+                            .replace(/###\s+/g, '<strong class="text-sm">')
+                            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*([^*]+)\*/g, '<em>$1</em>'),
+                        }}
+                      />
+                    ) : (
+                      <div className="text-sm whitespace-pre-wrap break-words">
+                        {message.content}
+                      </div>
+                    )}
+                    <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </p>
                   </div>
+                  {message.role === 'user' && (
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                      <span className="text-xs font-semibold text-primary">
+                        {typeof window !== 'undefined' ? (localStorage.getItem('wallet_address')?.substring(0, 2).toUpperCase() || 'U') : 'U'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
-            </div>
-            {allocations.length > 0 && (
-              <Button
-                onClick={handleExecuteInvestments}
-                disabled={isActive}
-                className="w-full gap-2"
-                variant="default"
-              >
-                <Zap className="h-4 w-4" />
-                {isActive ? 'Executing...' : `Execute ${allocations.length} Investments`}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Activity Log</CardTitle>
-          <CardDescription>Track agent actions and results</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {activityLog.length === 0 ? (
-              <p className="text-muted-foreground text-sm text-center py-8">No activity yet</p>
-            ) : (
-              activityLog.map((log, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-lg border-l-4 ${
-                    log.status === 'success' 
-                      ? 'border-green-500 bg-green-50 dark:bg-green-950/20' 
-                      : log.status === 'error'
-                      ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
-                      : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-semibold text-sm">{log.action}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{log.details}</p>
+              {loading && (
+                <div className="flex justify-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 mt-1">
+                    <Sparkles className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="bg-muted rounded-2xl p-4">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span className="text-sm text-muted-foreground">Thinking...</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </span>
                   </div>
                 </div>
-              ))
+              )}
+            </>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Input */}
+      <div className="p-4 border-t border-border/50 bg-card/90">
+        <div className="flex items-center gap-2">
+          <Input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask about investment opportunities, projects, or get recommendations..."
+            className="flex-1"
+            disabled={loading}
+          />
+          <Button
+            onClick={handleSearch}
+            disabled={loading || !query.trim()}
+            size="lg"
+            className="gap-2"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
             )}
-          </div>
-        </CardContent>
-      </Card>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -30,10 +30,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buyer API key is required for account creation
+    // Locus Wallet Agent API key is required for account creation
     if (!buyerApiKey || !buyerApiKey.trim()) {
       return NextResponse.json(
-        { error: 'Locus buyer API key is required. Please create one on the Locus platform before signing up.' },
+        { error: 'Locus Wallet Agent API key is required. When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.' },
         { status: 400 }
       );
     }

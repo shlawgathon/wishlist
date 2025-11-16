@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     if (!buyerApiKey) {
       return NextResponse.json(
-        { error: 'Buyer API key is required' },
+        { error: 'Locus Wallet Agent API key is required' },
         { status: 400 }
       );
     }
@@ -26,22 +26,22 @@ export async function POST(request: NextRequest) {
     // Validate API key format
     if (!buyerApiKey.startsWith('locus_dev_') && !buyerApiKey.startsWith('locus_')) {
       return NextResponse.json(
-        { error: 'Invalid Locus API key format. Should start with "locus_dev_" or "locus_"' },
+        { error: 'Invalid Locus Wallet Agent API key format. When creating an agent in your wallet, make sure to select "Create API Key". API keys start with "locus_dev_" or "locus_".' },
         { status: 400 }
       );
     }
 
-    // Update user's buyer API key
+    // Update user's Locus Wallet Agent API key
     const updated = await updateUserBuyerApiKey(user.username, buyerApiKey);
     if (!updated) {
       return NextResponse.json(
-        { error: 'Failed to update buyer API key' },
+        { error: 'Failed to update Locus Wallet Agent API key' },
         { status: 500 }
       );
     }
 
     // Update session with new API key
-    const sessionToken = createSession(updated.username, updated.buyerApiKey);
+    const sessionToken = createSession(updated.username);
     const cookieStore = await cookies();
     cookieStore.set('session_token', sessionToken, {
       httpOnly: true,
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Update buyer key error:', error);
     return NextResponse.json(
-      { error: 'Failed to update buyer API key', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to update Locus Wallet Agent API key', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

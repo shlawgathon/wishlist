@@ -78,7 +78,7 @@ Return a JSON object with: parsedBudget, categories (array), and preferences (ob
 
   try {
     const message = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [
         {
@@ -139,7 +139,7 @@ Return as JSON array with: projectId, title, description, score, matchReason, su
 
   try {
     const message = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       messages: [
         {
@@ -241,139 +241,457 @@ export function registerTools() {
 }
 
 /**
- * Use Claude Agent SDK with Locus MCP for autonomous payments
- * This enables Claude to directly use Locus tools via MCP
+ * Use Claude with Locus MCP tools using the official MCP connector API
+ * According to https://docs.claude.com/en/docs/agents-and-tools/mcp-connector
  * 
  * @export
  * @param {string} prompt - The prompt to send to Claude
  * @param {string} anthropicApiKey - Anthropic API key
- * @param {string} locusApiKey - Locus API key for MCP
+ * @param {string} locusApiKey - Locus API key for MCP authentication
  * @returns {Promise<string>} The response from Claude
  */
+/**
+ * Test MCP server connection and verify tools are available
+ */
+async function verifyMCPConnection(locusApiKey: string): Promise<{ success: boolean; tools?: any[]; error?: string }> {
+  try {
+    const response = await fetch('https://mcp.paywithlocus.com/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${locusApiKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {},
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      return { success: false, error: data.error.message || JSON.stringify(data.error) };
+    }
+
+    const tools = data.result?.tools || [];
+    return { success: true, tools };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+/**
+ * Use Claude Agent SDK with local Locus MCP server
+ * This creates a local MCP server that wraps Locus MCP and connects it to Claude
+ * @param locusApiKey - Locus Buyer API key (buyerApiKey) for authentication
+ */
+export async function useLocusWithClaudeAgentSDK(
+  prompt: string,
+  anthropicApiKey: string,
+  locusApiKey: string
+): Promise<string> {
+  try {
+    // Import MCP client to connect to local server
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+
+    // Connect to MCP server (local for dev, Vercel API route for production)
+    const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 
+      (process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}/api/mcp`
+        : process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/api/mcp`
+        : 'http://localhost:7001');
+    
+    console.log(`🔌 Connecting to local MCP server at ${MCP_SERVER_URL}...`);
+    
+    const transport = new StreamableHTTPClientTransport(
+      new URL(MCP_SERVER_URL)
+    );
+    
+    const mcpClient = new Client({
+      name: 'wishlist-claude-agent',
+      version: '1.0.0',
+    }, {
+      capabilities: {},
+    });
+
+    await mcpClient.connect(transport);
+    console.log('✅ Connected to local MCP server');
+
+    // Get available tools from MCP server
+    const toolsResponse = await mcpClient.listTools();
+    const tools = toolsResponse.tools || [];
+    console.log(`✅ Found ${tools.length} tools from MCP server:`, tools.map(t => t.name));
+    
+    if (tools.length === 0) {
+      console.error('❌ No tools found from MCP server!');
+      throw new Error('No tools available from MCP server');
+    }
+
+    // Convert MCP tools to Claude tool format
+    const { zodToJsonSchema } = await import('zod-to-json-schema');
+    
+    const claudeTools = tools.map(tool => {
+      // Convert Zod schema to JSON schema if needed
+      let inputSchema: any = tool.inputSchema;
+      
+      // Check if it's a Zod schema (has _def property)
+      if (inputSchema && typeof inputSchema === 'object' && '_def' in inputSchema) {
+        try {
+          // Convert Zod schema to JSON Schema
+          inputSchema = zodToJsonSchema(inputSchema, {
+            target: 'openApi3',
+            $refStrategy: 'none',
+          });
+        } catch (e) {
+          console.warn(`Failed to convert Zod schema for ${tool.name}, using default:`, e);
+          inputSchema = { type: 'object', properties: {} };
+        }
+      }
+      
+      // If inputSchema is still not a valid JSON Schema, use default
+      if (!inputSchema || typeof inputSchema !== 'object' || !('type' in inputSchema)) {
+        inputSchema = { type: 'object', properties: {} };
+      }
+      
+      return {
+        name: tool.name,
+        description: tool.description || `Call ${tool.name} via Locus MCP`,
+        input_schema: inputSchema,
+      };
+    });
+    
+    console.log(`📋 Converted ${claudeTools.length} tools for Claude:`, claudeTools.map(t => ({ name: t.name, description: t.description })));
+
+    // Create Claude client
+    const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+
+    const messages: any[] = [{ role: 'user', content: prompt }];
+    let maxIterations = 10;
+    let iteration = 0;
+
+    while (iteration < maxIterations) {
+      iteration++;
+
+      // Send message to Claude with tools
+      const requestBody = {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        messages,
+        tools: claudeTools,
+      };
+      
+      console.log('📤 Sending to Claude with tools:', {
+        model: requestBody.model,
+        messageCount: messages.length,
+        toolCount: claudeTools.length,
+        toolNames: claudeTools.map(t => t.name),
+      });
+      
+      const response = await anthropic.messages.create(requestBody);
+
+      console.log('📨 Claude response:', {
+        stopReason: response.stop_reason,
+        contentBlockCount: response.content.length,
+        hasToolUse: response.content.some((c: any) => c.type === 'tool_use'),
+        contentTypes: response.content.map((c: any) => c.type),
+      });
+      
+      // Log if Claude says it doesn't have access
+      const textBlocks = response.content.filter((c: any) => c.type === 'text');
+      if (textBlocks.length > 0) {
+        const text = (textBlocks[0] as any).text.toLowerCase();
+        if (text.includes("don't have access") || text.includes("cannot") || text.includes("unable") || text.includes("no access")) {
+          console.error('❌ Claude says it does not have access to tools!');
+          console.error('📋 Response text:', (textBlocks[0] as any).text.substring(0, 500));
+          console.error('🔍 Available tools were:', claudeTools.map(t => t.name));
+        }
+      }
+
+      // Add assistant response to conversation
+      messages.push({
+        role: 'assistant',
+        content: response.content,
+      });
+
+      // Check if Claude wants to use a tool
+      const toolUseBlocks = response.content.filter(
+        (c: any) => c.type === 'tool_use'
+      ) as Array<{ type: 'tool_use'; id: string; name: string; input: any }>;
+
+      if (toolUseBlocks.length === 0) {
+        // No tools to use, return the text response
+        const textBlocks = response.content.filter((c: any) => c.type === 'text');
+        if (textBlocks.length > 0) {
+          return (textBlocks[0] as any).text;
+        }
+        return 'No response generated';
+      }
+
+      // Execute tool calls via MCP client
+      const toolResults: any[] = [];
+
+      for (const toolUse of toolUseBlocks) {
+        console.log(`🔧 Claude calling tool: ${toolUse.name}`, toolUse.input);
+
+        try {
+          // Call tool via MCP client
+          const result = await mcpClient.callTool({
+            name: toolUse.name,
+            arguments: toolUse.input,
+          });
+
+          console.log(`✅ Tool ${toolUse.name} executed successfully`);
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result.content || result),
+              },
+            ],
+          });
+        } catch (error) {
+          console.error(`❌ Error calling tool ${toolUse.name}:`, error);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            is_error: true,
+            content: [
+              {
+                type: 'text',
+                text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            ],
+          });
+        }
+      }
+
+      // Add tool results to conversation
+      messages.push({
+        role: 'user',
+        content: toolResults,
+      });
+    }
+
+    await mcpClient.close();
+    return 'Maximum iterations reached. Please try again.';
+  } catch (error) {
+    console.error('Error using Locus MCP with Claude Agent SDK:', error);
+    throw error;
+  }
+}
+
 export async function useLocusWithClaude(
   prompt: string,
   anthropicApiKey: string,
   locusApiKey: string
 ): Promise<string> {
   try {
-    const mcpServers = getLocusMCPServers(locusApiKey);
-    const options = {
-      mcpServers,
-      allowedTools: getLocusAllowedTools(),
-      apiKey: anthropicApiKey,
-      canUseTool: canUseLocusTool,
-    };
-
-    // Helper function to extract text from various result structures
-    function extractTextFromResult(result: any): string {
-      if (!result) return '';
-      
-      // If it's already a string
-      if (typeof result === 'string') {
-        // Check if it's a JSON-encoded string (starts and ends with quotes)
-        if (result.startsWith('"') && result.endsWith('"')) {
-          try {
-            return JSON.parse(result);
-          } catch {
-            return result;
-          }
-        }
-        return result;
-      }
-      
-      // Try various object structures
-      if (result.content?.[0]?.text) {
-        return result.content[0].text;
-      }
-      if (result.text) {
-        return result.text;
-      }
-      if (result.message) {
-        return result.message;
-      }
-      if (Array.isArray(result) && result[0]?.text) {
-        return result[0].text;
-      }
-      
-      // Last resort: convert to string without JSON.stringify to avoid quotes
-      return String(result);
-    }
-
-    let finalResult: string = '';
-    let hasResult = false;
+    // First, verify MCP server connection and tool availability
+    console.log('🔍 Verifying MCP server connection...');
+    const verification = await verifyMCPConnection(locusApiKey);
     
-    try {
-      for await (const message of query({
-        prompt,
-        options
-      })) {
-        hasResult = true;
+    if (!verification.success) {
+      console.error('❌ MCP server verification failed:', verification.error);
+      throw new Error(`MCP server connection failed: ${verification.error}`);
+    }
+    
+    console.log(`✅ MCP server verified! Found ${verification.tools?.length || 0} tools:`, 
+      verification.tools?.map((t: any) => t.name));
+    
+    // Configure Locus MCP server according to https://docs.claude.com/en/docs/agents-and-tools/mcp-connector
+    // According to https://docs.paywithlocus.com/mcp-spec and https://docs.claude.com/en/docs/agents-and-tools/remote-mcp-servers
+    const mcpServerConfig = {
+      type: 'url' as const,
+      url: 'https://mcp.paywithlocus.com/mcp', // MCP server endpoint
+      name: 'locus',
+      authorization_token: locusApiKey, // Bearer token (API key with locus_ prefix)
+      tool_configuration: {
+        enabled: true,
+        // allowed_tools: undefined means all tools are allowed
+      },
+    };
+    
+    console.log('🔌 MCP Server Configuration:', {
+      url: mcpServerConfig.url,
+      name: mcpServerConfig.name,
+      hasAuth: !!mcpServerConfig.authorization_token,
+      authPrefix: mcpServerConfig.authorization_token?.substring(0, 10) + '...',
+      verifiedTools: verification.tools?.length || 0,
+    });
+
+    // Use Anthropic Messages API with MCP connector
+    // Requires beta header: "anthropic-beta": "mcp-client-2025-04-04"
+    const client = new Anthropic({ 
+      apiKey: anthropicApiKey,
+      defaultHeaders: {
+        'anthropic-beta': 'mcp-client-2025-04-04',
+      },
+    });
+
+    const messages: any[] = [{ role: 'user', content: prompt }];
+    let maxIterations = 10; // Prevent infinite loops
+    let iteration = 0;
+    
+    while (iteration < maxIterations) {
+      iteration++;
+      
+      // Create message with MCP server configuration
+      // According to https://docs.claude.com/en/docs/agents-and-tools/mcp-connector
+      // mcp_servers is a beta feature, so we need to cast to any to bypass TypeScript
+      // The MCP connector automatically discovers tools from the server
+      const requestBody = {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        messages,
+        mcp_servers: [mcpServerConfig],
+      };
+      
+      console.log('📤 Sending request to Claude with MCP servers:', {
+        model: requestBody.model,
+        messageCount: messages.length,
+        mcpServerCount: requestBody.mcp_servers.length,
+        mcpServerUrl: requestBody.mcp_servers[0].url,
+      });
+      
+      const response = await client.messages.create(requestBody as any);
+      
+      // Log response structure (but not full content to avoid spam)
+      console.log('📨 Claude response received:', {
+        stopReason: response.stop_reason,
+        contentBlockCount: response.content.length,
+        contentBlockTypes: response.content.map((c: any) => c.type),
+        hasToolUse: response.content.some((c: any) => c.type === 'mcp_tool_use' || c.type === 'tool_use'),
+      });
+      
+      // Add assistant's response to conversation
+      messages.push({
+        role: 'assistant',
+        content: response.content,
+      });
+      
+      // Check if Claude wants to use an MCP tool
+      // According to docs, MCP tools return as "mcp_tool_use" blocks
+      // Also check for regular "tool_use" blocks in case the format is different
+      const allContent = response.content as any[];
+      const mcpToolUseBlocks = allContent.filter(
+        (block: any) => block.type === 'mcp_tool_use' || (block.type === 'tool_use' && block.name)
+      ) as Array<{ 
+        type: 'mcp_tool_use' | 'tool_use'; 
+        id: string; 
+        name: string; 
+        server_name?: string;
+        input: any;
+      }>;
+      
+      console.log(`🔍 Found ${mcpToolUseBlocks.length} tool use blocks:`, mcpToolUseBlocks.map(t => ({ type: t.type, name: t.name })));
+      
+      if (mcpToolUseBlocks.length === 0) {
+        // Check if Claude said it doesn't have access - if so, log a warning
+        const textBlocks = allContent.filter(
+          (block: any) => block.type === 'text'
+        ) as Array<{ type: 'text'; text: string }>;
         
-        // Handle different message types
-        if (message.type === 'result') {
-          if ((message as any).subtype === 'success') {
-            const result = (message as any).result;
-            const extracted = extractTextFromResult(result);
-            if (extracted) {
-              finalResult = extracted;
-            }
-          } else if ((message as any).subtype === 'error') {
-            const errorMsg = (message as any).error || (message as any).message || 'Unknown error';
-            console.error('Claude Agent SDK error:', errorMsg);
-            throw new Error(`Claude Agent SDK error: ${errorMsg}`);
+        if (textBlocks.length > 0) {
+          const text = textBlocks[0].text.toLowerCase();
+          if (text.includes("don't have access") || text.includes("cannot") || text.includes("unable") || text.includes("no access")) {
+            console.error('❌ Claude says it does not have access to tools! Response:', textBlocks[0].text);
+            console.error('📋 Full response content:', JSON.stringify(response.content, null, 2));
           }
-        } else if ((message as any).type === 'text') {
-          // Direct text message
-          const text = (message as any).text || (message as any).content || '';
-          if (text) {
-            finalResult = text;
-          }
-        } else if ((message as any).type === 'content' && (message as any).content) {
-          // Content block message
-          const content = (message as any).content;
-          if (typeof content === 'string') {
-            finalResult = content;
-          } else if (content?.text) {
-            finalResult = content.text;
-          } else if (Array.isArray(content) && content[0]?.text) {
-            finalResult = content[0].text;
-          }
-        } else if ((message as any).content) {
-          // Handle content blocks directly
-          const content = (message as any).content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === 'text' && block.text) {
-                finalResult = block.text;
-                break;
-              }
-            }
-          }
+          return textBlocks[0].text;
+        }
+        return 'No response generated';
+      }
+      
+      // Execute MCP tool calls
+      // Note: With the MCP connector, Claude handles tool execution automatically
+      // But we need to provide tool results in the next message
+      const toolResults: any[] = [];
+      
+      for (const toolUse of mcpToolUseBlocks) {
+        const toolName = toolUse.name;
+        const serverName = toolUse.server_name || 'locus';
+        console.log(`🔧 Claude calling Locus MCP tool: ${toolName} from server ${serverName}`, toolUse.input);
+        
+        // Import callLocusMCPTool to execute the tool
+        const { callLocusMCPTool } = await import('./locus-agent');
+        
+        try {
+          // Call the MCP tool directly
+          const result = await callLocusMCPTool(
+            toolName,
+            toolUse.input,
+            locusApiKey
+          );
+          
+          console.log(`✅ Tool ${toolName} executed successfully:`, result);
+          
+          // Format result according to MCP tool result block format
+          toolResults.push({
+            type: 'mcp_tool_result',
+            tool_use_id: toolUse.id,
+            is_error: false,
+            content: [
+              {
+                type: 'text',
+                text: typeof result === 'string' ? result : JSON.stringify(result),
+              },
+            ],
+          });
+        } catch (error) {
+          console.error(`❌ Error calling MCP tool ${toolName}:`, error);
+          toolResults.push({
+            type: 'mcp_tool_result',
+            tool_use_id: toolUse.id,
+            is_error: true,
+            content: [
+              {
+                type: 'text',
+                text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            ],
+          });
         }
       }
-
-      if (!hasResult) {
-        console.warn('Claude Agent SDK query returned no messages');
-        return 'No response generated';
-      }
-
-      if (!finalResult) {
-        console.warn('Claude Agent SDK query completed but no text content was extracted');
-        return 'No response generated';
-      }
-
-      return finalResult;
-    } catch (iterError) {
-      // If the error is from the query iteration itself, wrap it
-      if (iterError instanceof Error) {
-        console.error('Error during Claude Agent SDK query iteration:', iterError.message);
-        throw new Error(`Claude Agent SDK query failed: ${iterError.message}`);
-      }
-      throw iterError;
+      
+      // Add tool results to conversation for next iteration
+      messages.push({
+        role: 'user',
+        content: toolResults,
+      });
     }
+    
+    return 'Maximum iterations reached. Please try again.';
   } catch (error) {
-    console.error('Error using Locus with Claude:', error);
-    throw error;
+    console.error('Error using Locus MCP with Claude:', error);
+    // Fall back to standard Claude API if MCP fails
+    try {
+      const client = new Anthropic({ apiKey: anthropicApiKey });
+      const message = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const textContent = message.content.find((c: any) => c.type === 'text');
+      return textContent && 'text' in textContent ? textContent.text : 'No response';
+    } catch (fallbackError) {
+      throw new Error(`MCP and fallback both failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
 

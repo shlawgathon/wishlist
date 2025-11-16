@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session
-    const sessionToken = createSession(user.username, user.buyerApiKey);
+    const sessionToken = createSession(user.username);
     const cookieStore = await cookies();
     cookieStore.set('session_token', sessionToken, {
       httpOnly: true,

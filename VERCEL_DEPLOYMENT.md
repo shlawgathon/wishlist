@@ -61,9 +61,12 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 LOCUS_BUYER_API_KEY=locus_dev_...
 LOCUS_SELLER_API_KEY=locus_dev_...
 
-# Coinbase CDP (Optional - for wallet operations)
-CDP_API_KEY_NAME=your_key_name
-CDP_API_KEY_PRIVATE_KEY=your_private_key
+# Coinbase CDP API Keys (Required for Coinbase Pay)
+# Get these from: https://portal.cdp.coinbase.com/projects/api-keys
+# IMPORTANT: Must use ECDSA (ES256) algorithm, NOT Ed25519
+# Format: "organizations/{org_id}/apiKeys/{key_id}"
+CDP_API_KEY_NAME=organizations/your_org_id/apiKeys/your_key_id
+CDP_API_KEY_PRIVATE_KEY=-----BEGIN EC PRIVATE KEY-----\nYOUR_PRIVATE_KEY\n-----END EC PRIVATE KEY-----
 
 # x402 Bazaar Endpoint
 X402_BAZAAR_ENDPOINT=https://bazaar.x402.example.com
@@ -89,7 +92,7 @@ SELLER_WALLET_ADDRESS=0x...
 
 - **MONGODB_URI**: Your MongoDB Atlas connection string
 - **ANTHROPIC_API_KEY**: Get from https://console.anthropic.com/
-- **LOCUS_BUYER_API_KEY**: Used for making payments (investments)
+- **LOCUS_BUYER_API_KEY**: Locus Wallet Agent API key - Used for making payments (investments). When creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff.
 - **LOCUS_SELLER_API_KEY**: Used for receiving payments (project creators)
 - **NEXT_PUBLIC_APP_URL**: Vercel will set this automatically, but you can override it
 - **AUTH_SALT**: Generate a random string for password hashing

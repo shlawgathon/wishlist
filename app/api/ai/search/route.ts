@@ -3,6 +3,7 @@ import { useLocusWithClaude } from '@/lib/claude-agent';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAllListings } from '@/lib/listings-store';
 import { mockListings } from '@/lib/mock-listings';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     // Don't include mock listings - only use real database listings
     const allListings = filteredListings;
 
-    // Format listings for Claude with clickable links
+    // Format listings for Claude with clickable links and wallet addresses
     const listingsInfo = allListings.map((listing) => ({
       id: listing.id,
       name: listing.name,
@@ -65,22 +66,64 @@ export async function POST(request: NextRequest) {
       daysLeft: listing.daysLeft,
       progress: ((listing.amountRaised / listing.fundingGoal) * 100).toFixed(1),
       url: `${baseUrl}/listings/${listing.id}`,
+      walletAddress: listing.sellerWalletAddress || listing.sellerWallet, // Use sellerWalletAddress if available, fallback to sellerWallet
     }));
 
-    // Build context with available fundraisers
+    // Build context with available fundraisers including wallet addresses
     const listingsContext = listingsInfo.length > 0
-      ? `\n\nAvailable Fundraisers (always include clickable links):\n${listingsInfo.map((l) =>
-          `[${l.name}](${l.url}) - ${l.description} | $${l.amountRaised.toLocaleString()}/${l.fundingGoal.toLocaleString()} (${l.progress}% funded)`
+      ? `\n\nAvailable Fundraisers (always include clickable links and wallet addresses for payments):\n${listingsInfo.map((l) =>
+          `[${l.name}](${l.url}) - ${l.description} | $${l.amountRaised.toLocaleString()}/${l.fundingGoal.toLocaleString()} (${l.progress}% funded) | Wallet: ${l.walletAddress || 'N/A'}`
         ).join('\n')}`
       : '\n\nNo fundraisers are currently available.';
 
-    // If Locus API key is provided, use MCP integration
-    if (locusApiKey) {
+    // Try to get Locus API key from user session if not provided
+    let finalLocusApiKey = locusApiKey;
+    if (!finalLocusApiKey) {
       try {
-        const result = await useLocusWithClaude(
-          `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}\n\nUser query: ${query}\n\nInstructions: Be concise (under 100 words). ALWAYS suggest relevant fundraisers with clickable markdown links [Name](URL). Focus on specific fundraisers, not generic advice.`,
+        const user = await getCurrentUser();
+        if (user?.buyerApiKey) {
+          finalLocusApiKey = user.buyerApiKey;
+        }
+      } catch (error) {
+        // User not authenticated, continue without Locus
+        console.log('No authenticated user, proceeding without Locus MCP');
+      }
+    }
+
+    // If Locus API key is available, use MCP integration with payment tools
+    if (finalLocusApiKey) {
+      try {
+        const paymentToolsInfo = `\n\n🚨🚨🚨 CRITICAL: YOU HAVE TOOLS AVAILABLE IN YOUR TOOL LIST 🚨🚨🚨
+
+**IMPORTANT: The tools are ALREADY REGISTERED in your tool list. Check your available tools - you will see:**
+- get_payment_context
+- send_to_address  
+- send_to_contact
+- send_to_email
+
+**WHEN A USER ASKS TO INVEST OR DONATE, YOU MUST:**
+1. IMMEDIATELY use the get_payment_context tool (no parameters needed) to check your available balance
+2. Find the wallet address from the project listing above (format: "Wallet: 0x...")
+3. IMMEDIATELY use the send_to_address tool with {"address": "0x...", "amount": X.XX, "memo": "Donation to [project name]"}
+4. Confirm the payment succeeded
+
+**DO NOT SAY YOU DON'T HAVE ACCESS. THE TOOLS ARE IN YOUR TOOL LIST. USE THEM.**
+**DO NOT TELL USERS TO MANUALLY SEND MONEY. YOU CAN DO IT AUTOMATICALLY USING THE TOOLS.**
+**IF YOU SEE THE TOOLS IN YOUR TOOL LIST, YOU CAN USE THEM. CHECK YOUR TOOL LIST NOW.**`;
+
+        // Use Claude Agent SDK with MCP server (local for dev, API route for production)
+        const { useLocusWithClaudeAgentSDK } = await import('@/lib/claude-agent');
+        
+        // Only start local MCP server in development (not on Vercel)
+        if (!process.env.VERCEL && !process.env.NEXT_PUBLIC_APP_URL) {
+          const { ensureMCPServerRunning } = await import('@/lib/locus-mcp-server');
+          await ensureMCPServerRunning(finalLocusApiKey);
+        }
+        
+        const result = await useLocusWithClaudeAgentSDK(
+          `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}${paymentToolsInfo}\n\nUser query: ${query}\n\n🚨 CRITICAL INSTRUCTIONS:\n- You are connected to Locus MCP server via local MCP server\n- The payment tools (get_payment_context, send_to_address, etc.) are AVAILABLE in your tool list\n- When users request payments, you MUST use these tools - do not say you can't\n- Each project listing above shows its wallet address as "Wallet: 0x..."\n- Use send_to_address with that wallet address to make payments\n- DO NOT tell users to manually send money - you can do it automatically using the tools`,
           anthropicApiKey,
-          locusApiKey
+          finalLocusApiKey
         );
         return NextResponse.json({ result });
       } catch (error) {
@@ -97,7 +140,7 @@ export async function POST(request: NextRequest) {
     // Standard Claude API call with listings context
     const client = new Anthropic({ apiKey: anthropicApiKey });
     const message = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 512,
       messages: [
         {

@@ -13,94 +13,163 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// Load initial state from localStorage (client-side only)
-function getInitialMessages(): ChatMessage[] {
-  if (typeof window === 'undefined') return [];
-  
+// Save chat to MongoDB via API
+async function saveChatToMongoDB(chat: { id: string; title: string; messages: ChatMessage[]; createdAt: number; updatedAt: number }): Promise<boolean> {
   try {
-    const saved = localStorage.getItem('wishlist_chat_history');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+    // First check if chat exists
+    const checkResponse = await fetch(`/api/chat/histories/${chat.id}`);
+    if (checkResponse.status === 404) {
+      // Chat doesn't exist, create it
+      const createResponse = await fetch('/api/chat/histories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chat),
+      });
+      return createResponse.ok;
+    } else if (checkResponse.ok) {
+      // Chat exists, update it
+      const updateResponse = await fetch(`/api/chat/histories/${chat.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: chat.title,
+          messages: chat.messages,
+        }),
+      });
+      return updateResponse.ok;
     }
+    return false;
   } catch (error) {
-    console.error('Error loading chat history:', error);
+    console.error('Error saving chat to MongoDB:', error);
+    return false;
   }
-  return [];
+}
+
+// Generate a title from the first user message
+function generateTitle(firstMessage: string): string {
+  if (!firstMessage) return 'New Chat';
+  const trimmed = firstMessage.trim();
+  if (trimmed.length > 50) {
+    return trimmed.substring(0, 50) + '...';
+  }
+  return trimmed;
 }
 
 export default function AISearchBar() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(getInitialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [isChatMode, setIsChatMode] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  // Ensure we're on client side and load history
+  // Don't save query to sessionStorage - we don't want to save on reload
+
+  // Ensure we're on client side - always start in search box mode
   useEffect(() => {
     setIsMounted(true);
-    // Reload from localStorage on mount to ensure we have latest
-    const saved = localStorage.getItem('wishlist_chat_history');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-          // Auto-enter chat mode if there's existing history
-          setIsChatMode(true);
-        }
-      } catch (error) {
-        console.error('Error loading chat history:', error);
-      }
-    }
+    // Always start fresh - no auto-loading chat history
+    setMessages([]);
+    setIsChatMode(false);
+    setCurrentChatId(null);
+    
+    // Clear any saved queries on reload (don't save on reload)
+    sessionStorage.removeItem('current_search_query');
+    sessionStorage.removeItem('pending_search_query');
   }, []);
 
-  // Save chat history to localStorage whenever messages change
+  // Save chat to MongoDB only on exit (page unload/visibility change)
+  // Don't save on reload or message changes
+  const hasSavedOnExitRef = useRef(false);
+  
   useEffect(() => {
-    if (isMounted && typeof window !== 'undefined') {
-      // Always save to localStorage when messages change
-      try {
-        localStorage.setItem('wishlist_chat_history', JSON.stringify(messages));
-      } catch (error) {
-        console.error('Error saving chat history:', error);
+    if (typeof window === 'undefined' || !isMounted) return;
+    
+    const saveChatOnExit = () => {
+      // Only save once on exit
+      if (hasSavedOnExitRef.current || messages.length === 0) {
+        return;
       }
-    }
-  }, [messages, isMounted]);
-
-  // Save before page unload/navigation
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleBeforeUnload = () => {
-      // Force save before navigation/refresh
-      try {
-        localStorage.setItem('wishlist_chat_history', JSON.stringify(messages));
-      } catch (error) {
-        console.error('Error saving chat history on unload:', error);
+      
+      hasSavedOnExitRef.current = true;
+      
+      // Create or update current chat
+      let chatId = currentChatId;
+      if (!chatId) {
+        chatId = `chat_${Date.now()}`;
       }
+      
+      const firstUserMessage = messages.find(m => m.role === 'user');
+      const title = firstUserMessage ? generateTitle(firstUserMessage.content) : 'New Chat';
+      
+      const chat = {
+        id: chatId,
+        title,
+        messages,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      
+      // Use fetch with keepalive for reliable saving on page unload
+      // sendBeacon doesn't support custom headers needed for auth, so use fetch with keepalive
+      fetch(`/api/chat/histories/${chatId}`, { method: 'HEAD' })
+        .then(response => {
+          if (response.status === 404) {
+            // Create new chat
+            fetch('/api/chat/histories', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(chat),
+              keepalive: true,
+            }).catch(() => {});
+          } else {
+            // Update existing chat
+            fetch(`/api/chat/histories/${chatId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title, messages }),
+              keepalive: true,
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {
+          // Fallback: try to create
+          fetch('/api/chat/histories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chat),
+            keepalive: true,
+          }).catch(() => {});
+        });
     };
-
-    // Also listen for visibility change (tab switch)
+    
+    // Save on page unload (closing tab/window, navigating away)
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      saveChatOnExit();
+    };
+    
+    // Save when page becomes hidden (tab switch, minimize, etc.)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        try {
-          localStorage.setItem('wishlist_chat_history', JSON.stringify(messages));
-        } catch (error) {
-          console.error('Error saving chat history on visibility change:', error);
-        }
+        saveChatOnExit();
       }
     };
-
+    
+    // Save on pagehide (more reliable than beforeunload)
+    const handlePageHide = () => {
+      saveChatOnExit();
+    };
+    
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
+    
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [messages]);
+  }, [messages, isMounted, currentChatId]);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -108,6 +177,10 @@ export default function AISearchBar() {
     // Enter chat mode when user sends first message
     if (!isChatMode) {
       setIsChatMode(true);
+      // Create new chat when entering chat mode
+      if (!currentChatId) {
+        setCurrentChatId(`chat_${Date.now()}`);
+      }
     }
 
     const userMessage: ChatMessage = {
@@ -117,21 +190,13 @@ export default function AISearchBar() {
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => {
-      const updated = [...prev, userMessage];
-      // Immediately save to localStorage
-      try {
-        localStorage.setItem('wishlist_chat_history', JSON.stringify(updated));
-      } catch (error) {
-        console.error('Error saving chat history:', error);
-      }
-      return updated;
-    });
+    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
     const currentQuery = query;
     setQuery('');
 
     try {
+      // Try to get Locus API key from localStorage first, then let backend try session
       const locusApiKey = localStorage.getItem('locus_buyer_api_key');
 
       const response = await fetch('/api/ai/search', {
@@ -139,12 +204,20 @@ export default function AISearchBar() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: currentQuery,
-          locusApiKey: locusApiKey || undefined,
+          locusApiKey: locusApiKey || undefined, // Backend will also check user session
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Search failed');
+        // Try to get error message from response
+        let errorMessage = 'Search failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.details || errorMessage;
+        } catch {
+          errorMessage = `Search failed: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -157,16 +230,7 @@ export default function AISearchBar() {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => {
-        const updated = [...prev, assistantMessage];
-        // Immediately save to localStorage
-        try {
-          localStorage.setItem('wishlist_chat_history', JSON.stringify(updated));
-        } catch (error) {
-          console.error('Error saving chat history:', error);
-        }
-        return updated;
-      });
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Search error:', error);
       const errorMessage: ChatMessage = {
@@ -175,16 +239,7 @@ export default function AISearchBar() {
         content: 'Error: Failed to process search. Please try again.',
         timestamp: Date.now(),
       };
-      setMessages((prev) => {
-        const updated = [...prev, errorMessage];
-        // Immediately save to localStorage
-        try {
-          localStorage.setItem('wishlist_chat_history', JSON.stringify(updated));
-        } catch (error) {
-          console.error('Error saving chat history:', error);
-        }
-        return updated;
-      });
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -197,12 +252,10 @@ export default function AISearchBar() {
   };
 
   const clearHistory = () => {
-    if (window.confirm('Are you sure you want to clear chat history?')) {
-      setMessages([]);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('wishlist_chat_history');
-      }
-    }
+    // Clear immediately without confirmation
+    setMessages([]);
+    setIsChatMode(false);
+    setCurrentChatId(null);
   };
 
   // Auto-scroll to bottom when new messages arrive

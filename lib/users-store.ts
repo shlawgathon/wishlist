@@ -14,7 +14,8 @@ export interface User {
   _id?: ObjectId;
   username: string;
   passwordHash: string; // Hashed password
-  buyerApiKey: string; // Locus buyer API key (required)
+  buyerApiKey: string; // Locus Wallet Agent API key (required) - created when setting up agent in wallet
+  personalWalletAddress?: string; // Optional: Personal wallet address for viewing balance
   createdAt: number;
   updatedAt: number;
 }
@@ -60,7 +61,7 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   }
 }
 
-// Update user's buyer API key
+// Update user's Locus Wallet Agent API key
 export async function updateUserBuyerApiKey(
   username: string,
   buyerApiKey: string
@@ -83,7 +84,7 @@ export async function updateUserBuyerApiKey(
     
     return result || null;
   } catch (error) {
-    console.error('Error updating user buyer API key:', error);
+    console.error('Error updating user Locus Wallet Agent API key:', error);
     return null;
   }
 }
@@ -116,3 +117,30 @@ export async function updateUserPassword(
   }
 }
 
+// Update user's personal wallet address
+export async function updateUserPersonalWalletAddress(
+  username: string,
+  personalWalletAddress: string | undefined
+): Promise<User | null> {
+  try {
+    const client = await clientPromise;
+    const db = client.db(DB_NAME);
+    const collection = db.collection<User>(COLLECTIONS.users);
+    
+    const result = await collection.findOneAndUpdate(
+      { username },
+      { 
+        $set: { 
+          personalWalletAddress: personalWalletAddress || undefined,
+          updatedAt: Date.now(),
+        } 
+      },
+      { returnDocument: 'after' }
+    );
+    
+    return result || null;
+  } catch (error) {
+    console.error('Error updating user personal wallet address:', error);
+    return null;
+  }
+}

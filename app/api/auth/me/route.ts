@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { getUserByUsername } from '@/lib/users-store';
 
 export async function GET() {
   try {
@@ -12,10 +13,20 @@ export async function GET() {
       );
     }
 
+    // Get full user data from database to include personalWalletAddress
+    const dbUser = await getUserByUsername(user.username);
+    if (!dbUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({
       user: {
-        username: user.username,
-        buyerApiKey: user.buyerApiKey,
+        username: dbUser.username,
+        buyerApiKey: dbUser.buyerApiKey,
+        personalWalletAddress: dbUser.personalWalletAddress,
       },
     });
   } catch (error) {
