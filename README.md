@@ -2,6 +2,8 @@
 
 AI-powered crypto fundraising platform with autonomous investment matching using Claude Agent SDK, Locus payment agent, x402 protocol, and CDP wallets.
 
+**🌐 Live Demo**: https://wishlist-two-rho.vercel.app
+
 ## Features
 
 - **Creator Dashboard**: Create projects, set funding goals, track progress
@@ -31,22 +33,26 @@ AI-powered crypto fundraising platform with autonomous investment matching using
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd Wishlist
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Set up environment variables:
+
 ```bash
 cp .env.local.example .env.local
 ```
 
 Edit `.env.local` with your API keys:
+
 ```
 ANTHROPIC_API_KEY=your_key_here
 CDP_API_KEY_NAME=your_key_name
@@ -63,7 +69,8 @@ X402_BAZAAR_ENDPOINT=https://bazaar.x402.example.com
 NETWORK=base
 ```
 
-**Locus Integration**: 
+**Locus Integration**:
+
 - Locus enables AI agents to autonomously send payments on Base Mainnet using USDC
 - Uses MCP (Model Context Protocol) for integration with Claude Agent SDK
 - Wallet Agent API Key is used when making investments (backers)
@@ -73,6 +80,7 @@ NETWORK=base
 - Documentation: https://docs.payai.network/locus
 
 4. Run the development server:
+
 ```bash
 npm run dev
 ```
@@ -107,16 +115,20 @@ npm run dev
 ## API Endpoints
 
 ### Projects
+
 - `POST /api/projects/create` - Create a new project
 - `GET /api/projects/create` - List all projects
 
 ### Agent
+
 - `POST /api/agent/match` - Match investments using AI
 
 ### Investment
+
 - `POST /api/invest/execute` - Execute batch investments
 
 ### x402
+
 - `GET /api/x402/discover` - Discover available services
 
 ## Usage
@@ -167,16 +179,18 @@ This is an MVP implementation. In production, you would:
 
 ## Deployment
 
+**🌐 Live Demo**: [https://wishlist-oo8z2560c-locus-hackathon.vercel.app](https://wishlist-oo8z2560c-locus-hackathon.vercel.app)
+
 ### Deploy to Vercel
 
 1. **Push to Git**: Ensure your code is committed and pushed to GitHub/GitLab/Bitbucket
-
 2. **Connect to Vercel**:
+
    - Go to https://vercel.com/new
    - Import your repository
    - Vercel will auto-detect Next.js
-
 3. **Set Environment Variables** in Vercel dashboard (Settings → Environment Variables):
+
    - `MONGODB_URI` - Your MongoDB connection string
    - `ANTHROPIC_API_KEY` - Claude AI API key
    - `LOCUS_BUYER_API_KEY` - Locus Wallet Agent API key (when creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff)
@@ -189,7 +203,6 @@ This is an MVP implementation. In production, you would:
    - `NETWORK` - Blockchain network (default: `base`)
    - `BASE_RPC_URL` - Base RPC endpoint
    - `AUTH_SALT` - Random string for password hashing
-
 4. **Deploy**: Click "Deploy" or push a new commit
 
 See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed deployment instructions.
@@ -208,4 +221,3 @@ vercel --prod
 ## License
 
 MIT
-

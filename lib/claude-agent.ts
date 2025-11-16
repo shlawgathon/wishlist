@@ -300,29 +300,34 @@ export async function useLocusWithClaudeAgentSDK(
   anthropicApiKey: string,
   locusApiKey: string
 ): Promise<string> {
+  // Skip MCP on Vercel - only use for local development
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+  
+  if (isVercel) {
+    // On Vercel, fall back to regular Claude API without MCP
+    console.log('⚠️ Running on Vercel - skipping MCP, using standard Claude API');
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: anthropicApiKey });
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const textContent = message.content.find((c: any) => c.type === 'text');
+    return textContent && 'text' in textContent ? textContent.text : 'No response';
+  }
+  
+  // Declare mcpClient outside try block so it's accessible in catch
+  let mcpClient: any = null;
+  
   try {
     // Import MCP client to connect to local server
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
     const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
 
-    // Connect to MCP server (local for dev, Vercel API route for production)
-    // Priority: 1. MCP_SERVER_URL env var, 2. Local server if not on Vercel, 3. Vercel API route
-    let MCP_SERVER_URL = process.env.MCP_SERVER_URL;
-    
-    if (!MCP_SERVER_URL) {
-      // Check if we're on Vercel (production)
-      const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
-      
-      if (isVercel) {
-        // Use Vercel API route in production
-        const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL;
-        MCP_SERVER_URL = vercelUrl ? `https://${vercelUrl.replace(/^https?:\/\//, '')}/api/mcp` : undefined;
-      } else {
-        // Use local server in development
-        MCP_SERVER_URL = 'http://localhost:7001';
-      }
-    }
+    // Connect to local MCP server for development
+    let MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:7001';
     
     if (!MCP_SERVER_URL) {
       throw new Error('MCP_SERVER_URL not configured');
@@ -338,7 +343,7 @@ export async function useLocusWithClaudeAgentSDK(
     
     const transport = new StreamableHTTPClientTransport(mcpUrl);
     
-    const mcpClient = new Client({
+    mcpClient = new Client({
       name: 'wishlist-claude-agent',
       version: '1.0.0',
     }, {
@@ -381,7 +386,7 @@ export async function useLocusWithClaudeAgentSDK(
     // Get available tools from MCP server
     const toolsResponse = await mcpClient.listTools();
     const tools = toolsResponse.tools || [];
-    console.log(`✅ Found ${tools.length} tools from MCP server:`, tools.map(t => t.name));
+    console.log(`✅ Found ${tools.length} tools from MCP server:`, tools.map((t: any) => t.name));
     
     if (tools.length === 0) {
       console.error('❌ No tools found from MCP server!');
@@ -391,7 +396,7 @@ export async function useLocusWithClaudeAgentSDK(
     // Convert MCP tools to Claude tool format
     const { zodToJsonSchema } = await import('zod-to-json-schema');
     
-    const claudeTools = tools.map(tool => {
+    const claudeTools = tools.map((tool: any) => {
       // Convert Zod schema to JSON schema if needed
       let inputSchema: any = tool.inputSchema;
       
@@ -421,7 +426,7 @@ export async function useLocusWithClaudeAgentSDK(
       };
     });
     
-    console.log(`📋 Converted ${claudeTools.length} tools for Claude:`, claudeTools.map(t => ({ name: t.name, description: t.description })));
+    console.log(`📋 Converted ${claudeTools.length} tools for Claude:`, claudeTools.map((t: any) => ({ name: t.name, description: t.description })));
 
     // Create Claude client
     const anthropic = new Anthropic({ apiKey: anthropicApiKey });
@@ -445,7 +450,7 @@ export async function useLocusWithClaudeAgentSDK(
         model: requestBody.model,
         messageCount: messages.length,
         toolCount: claudeTools.length,
-        toolNames: claudeTools.map(t => t.name),
+        toolNames: claudeTools.map((t: any) => t.name),
       });
       
       const response = await anthropic.messages.create(requestBody);
@@ -464,7 +469,7 @@ export async function useLocusWithClaudeAgentSDK(
         if (text.includes("don't have access") || text.includes("cannot") || text.includes("unable") || text.includes("no access")) {
           console.error('❌ Claude says it does not have access to tools!');
           console.error('📋 Response text:', (textBlocks[0] as any).text.substring(0, 500));
-          console.error('🔍 Available tools were:', claudeTools.map(t => t.name));
+          console.error('🔍 Available tools were:', claudeTools.map((t: any) => t.name));
         }
       }
 
@@ -554,11 +559,13 @@ export async function useLocusWithClaudeAgentSDK(
     return 'Maximum iterations reached. Please try again.';
   } catch (error) {
     console.error('Error using Locus MCP with Claude Agent SDK:', error);
-    // Try to close client on error
-    try {
-      await mcpClient.close();
-    } catch (closeError) {
-      // Ignore close errors
+    // Try to close client on error if it was initialized
+    if (mcpClient) {
+      try {
+        await mcpClient.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
     }
     throw error;
   }
@@ -667,7 +674,7 @@ export async function useLocusWithClaude(
         input: any;
       }>;
       
-      console.log(`🔍 Found ${mcpToolUseBlocks.length} tool use blocks:`, mcpToolUseBlocks.map(t => ({ type: t.type, name: t.name })));
+      console.log(`🔍 Found ${mcpToolUseBlocks.length} tool use blocks:`, mcpToolUseBlocks.map((t: any) => ({ type: t.type, name: t.name })));
       
       if (mcpToolUseBlocks.length === 0) {
         // Check if Claude said it doesn't have access - if so, log a warning
