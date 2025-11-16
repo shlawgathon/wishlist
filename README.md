@@ -11,9 +11,10 @@ AI-powered crypto fundraising platform with autonomous investment matching using
 - **Autonomous Payments**: Locus agent orchestrates payments through x402 protocol
 - **CDP Wallets**: Secure embedded wallets for creators and backers
 - **Real-time Updates**: Track funding progress and investment history, live updates via Locus
-- **Semantic Search with Vector Embeddings**: Uses Voyage AI to generate vector embeddings for project descriptions, enabling semantic search that understands meaning and context rather than just keywords. Projects are stored in MongoDB Atlas with vector indexes for fast similarity searches.
-- **MongoDB Atlas**: Cloud-hosted database with vector search capabilities. Stores project listings, chat histories, and user data with automatic scaling and high availability. Vector indexes enable semantic search across project descriptions.
-- **Voyage AI Embeddings**: Generates high-quality vector embeddings (1536-dimensional) for project descriptions and user queries. These embeddings capture semantic meaning, allowing the platform to find relevant projects even when exact keywords don't match, improving discovery and recommendation accuracy.
+- **Semantic Search**: Voyage AI generates vector embeddings for intelligent project discovery beyond keywords
+- **MongoDB Atlas**: Cloud-hosted database with vector search indexes for fast similarity matching
+- **Vector Embeddings**: 1536-dimensional embeddings capture semantic meaning for accurate recommendations
+- **Authentication System**: Cookie-based session authentication with password hashing and MongoDB user storage 
 
 ## Tech Stack
 
@@ -59,7 +60,15 @@ cp .env.local.example .env.local
 Edit `.env.local` with your API keys:
 
 ```
+# Authentication
+AUTH_SALT=your_random_salt_string  # Random string for password hashing
+MONGODB_URI=your_mongodb_connection_string  # MongoDB connection string
+
+# AI & APIs
 ANTHROPIC_API_KEY=your_key_here
+VOYAGE_API_KEY=your_voyage_key  # Optional: For semantic search
+
+# Coinbase CDP
 CDP_API_KEY_NAME=your_key_name
 CDP_API_KEY_PRIVATE_KEY=your_private_key
 
@@ -70,8 +79,10 @@ LOCUS_BUYER_API_KEY=locus_dev_MCkl3AYiHaJ2nMIZ76OUbyR2kbsTgUsm
 # Seller API Key: Used for receiving payments (project creators)
 LOCUS_SELLER_API_KEY=locus_dev_I1mtiYkoDe6_pLBJhgl3PZxmDEpXbGWP
 
+# x402 Protocol
 X402_BAZAAR_ENDPOINT=https://bazaar.x402.example.com
 NETWORK=base
+BASE_RPC_URL=your_base_rpc_url  # Optional: Base network RPC endpoint
 ```
 
 **Locus Integration**:
@@ -115,6 +126,77 @@ npm run dev
     ├── x402-client.ts    # x402 protocol client
     ├── locus-agent.ts   # Locus payment orchestrator
     └── investment-analyzer.ts
+```
+
+## Authentication System
+
+The platform uses a cookie-based session authentication system with MongoDB for user storage.
+
+### Features
+
+- **User Registration**: Username/password signup with Locus API key requirement
+- **Session Management**: HTTP-only cookies with 30-day expiration
+- **Password Security**: SHA-256 hashing with salt (use bcrypt in production)
+- **Protected Routes**: Creator dashboard and API endpoints require authentication
+- **User Data**: Stores username, hashed password, Locus API keys, and optional wallet addresses
+
+### User Model
+
+```typescript
+interface User {
+  username: string;                    // Unique username (min 3 chars)
+  passwordHash: string;                // SHA-256 hashed password
+  buyerApiKey: string;                 // Required: Locus Wallet Agent API key
+  personalWalletAddress?: string;      // Optional: Personal wallet for balance viewing
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+### API Endpoints
+
+#### Authentication
+
+- `POST /api/auth/signup` - Create new account
+  - Requires: `username`, `password`, `buyerApiKey`
+  - Validates: Username uniqueness, password length (min 6), API key format
+  - Returns: User object with session cookie
+
+- `POST /api/auth/login` - Authenticate user
+  - Requires: `username`, `password`
+  - Returns: User object with session cookie
+
+- `POST /api/auth/logout` - End session
+  - Clears session cookie
+
+- `GET /api/auth/me` - Get current user
+  - Returns: Authenticated user data or 401 if not logged in
+
+#### User Management
+
+- `PUT /api/auth/update-buyer-key` - Update Locus API key
+- `PUT /api/auth/update-personal-wallet` - Update personal wallet address
+
+### Session Flow
+
+1. **Signup/Login**: User credentials validated → Session token created → HTTP-only cookie set
+2. **Request**: Cookie sent with each request → Server decodes session → User authenticated
+3. **Logout**: Cookie deleted → Session invalidated
+
+### Security Notes
+
+- Session tokens are base64-encoded and stored in HTTP-only cookies
+- Passwords are hashed with SHA-256 + salt (consider bcrypt for production)
+- Cookies are secure in production (HTTPS required)
+- Usernames must be unique and at least 3 characters
+- Passwords must be at least 6 characters
+- Locus API key is required for account creation (enables payment functionality)
+
+### Environment Variables
+
+```bash
+AUTH_SALT=your_random_salt_string  # Used for password hashing
+MONGODB_URI=your_mongodb_connection_string  # User data storage
 ```
 
 ## API Endpoints
