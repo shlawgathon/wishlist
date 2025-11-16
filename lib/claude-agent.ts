@@ -307,18 +307,36 @@ export async function useLocusWithClaudeAgentSDK(
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
 
     // Connect to MCP server (local for dev, Vercel API route for production)
-    const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 
-      (process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}/api/mcp`
-        : process.env.NEXT_PUBLIC_APP_URL
-        ? `${process.env.NEXT_PUBLIC_APP_URL}/api/mcp`
-        : 'http://localhost:7001');
+    // Priority: 1. MCP_SERVER_URL env var, 2. Local server if not on Vercel, 3. Vercel API route
+    let MCP_SERVER_URL = process.env.MCP_SERVER_URL;
+    
+    if (!MCP_SERVER_URL) {
+      // Check if we're on Vercel (production)
+      const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+      
+      if (isVercel) {
+        // Use Vercel API route in production
+        const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL;
+        MCP_SERVER_URL = vercelUrl ? `https://${vercelUrl.replace(/^https?:\/\//, '')}/api/mcp` : undefined;
+      } else {
+        // Use local server in development
+        MCP_SERVER_URL = 'http://localhost:7001';
+      }
+    }
+    
+    if (!MCP_SERVER_URL) {
+      throw new Error('MCP_SERVER_URL not configured');
+    }
     
     console.log(`🔌 Connecting to local MCP server at ${MCP_SERVER_URL}...`);
     
-    const transport = new StreamableHTTPClientTransport(
-      new URL(MCP_SERVER_URL)
-    );
+    // Add a unique session parameter to ensure each connection gets a fresh session
+    const { randomUUID } = await import('node:crypto');
+    const sessionParam = randomUUID();
+    const mcpUrl = new URL(MCP_SERVER_URL);
+    mcpUrl.searchParams.set('session', sessionParam);
+    
+    const transport = new StreamableHTTPClientTransport(mcpUrl);
     
     const mcpClient = new Client({
       name: 'wishlist-claude-agent',
@@ -327,8 +345,38 @@ export async function useLocusWithClaudeAgentSDK(
       capabilities: {},
     });
 
-    await mcpClient.connect(transport);
-    console.log('✅ Connected to local MCP server');
+    try {
+      await mcpClient.connect(transport);
+      console.log('✅ Connected to local MCP server');
+    } catch (connectError: any) {
+      // If connection fails with "already initialized", the server session might be reused
+      // This can happen if the server maintains state. Try to continue anyway by checking
+      // if we can still list tools (which doesn't require initialization)
+      if (connectError?.message?.includes('already initialized') || 
+          connectError?.message?.includes('Server already initialized')) {
+        console.log('⚠️ Server reports already initialized, attempting to continue...');
+        // Try to list tools to see if the connection actually works
+        try {
+          const testTools = await mcpClient.listTools();
+          if (testTools.tools && testTools.tools.length > 0) {
+            console.log('✅ Connection works despite initialization error, continuing...');
+            // Connection is actually functional, continue
+          } else {
+            throw new Error('Connection failed: server initialized but no tools available');
+          }
+        } catch (testError) {
+          // If we can't list tools, the connection is truly broken
+          try {
+            await mcpClient.close();
+          } catch (closeError) {
+            // Ignore close errors
+          }
+          throw new Error('MCP server session conflict. Please try again.');
+        }
+      } else {
+        throw connectError;
+      }
+    }
 
     // Get available tools from MCP server
     const toolsResponse = await mcpClient.listTools();
@@ -434,10 +482,19 @@ export async function useLocusWithClaudeAgentSDK(
       if (toolUseBlocks.length === 0) {
         // No tools to use, return the text response
         const textBlocks = response.content.filter((c: any) => c.type === 'text');
+        let result: string;
         if (textBlocks.length > 0) {
-          return (textBlocks[0] as any).text;
+          result = (textBlocks[0] as any).text;
+        } else {
+          result = 'No response generated';
         }
-        return 'No response generated';
+        // Close client before returning
+        try {
+          await mcpClient.close();
+        } catch (closeError) {
+          // Ignore close errors
+        }
+        return result;
       }
 
       // Execute tool calls via MCP client
@@ -488,10 +545,21 @@ export async function useLocusWithClaudeAgentSDK(
       });
     }
 
-    await mcpClient.close();
+    // Close client before returning
+    try {
+      await mcpClient.close();
+    } catch (closeError) {
+      // Ignore close errors
+    }
     return 'Maximum iterations reached. Please try again.';
   } catch (error) {
     console.error('Error using Locus MCP with Claude Agent SDK:', error);
+    // Try to close client on error
+    try {
+      await mcpClient.close();
+    } catch (closeError) {
+      // Ignore close errors
+    }
     throw error;
   }
 }

@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     // Don't include mock listings - only use real database listings
     const allListings = filteredListings;
 
-    // Format listings for Claude with clickable links and wallet addresses
+    // Format listings for Claude with clickable links (wallet addresses stored separately for payment tools)
     const listingsInfo = allListings.map((listing) => ({
       id: listing.id,
       name: listing.name,
@@ -66,15 +66,24 @@ export async function POST(request: NextRequest) {
       daysLeft: listing.daysLeft,
       progress: ((listing.amountRaised / listing.fundingGoal) * 100).toFixed(1),
       url: `${baseUrl}/listings/${listing.id}`,
-      walletAddress: listing.sellerWalletAddress || listing.sellerWallet, // Use sellerWalletAddress if available, fallback to sellerWallet
+      walletAddress: listing.sellerWalletAddress || listing.sellerWallet, // Keep for payment tools but don't show in prompt
     }));
 
-    // Build context with available fundraisers including wallet addresses
+    // Build context with available fundraisers (no wallet addresses shown)
     const listingsContext = listingsInfo.length > 0
-      ? `\n\nAvailable Fundraisers (always include clickable links and wallet addresses for payments):\n${listingsInfo.map((l) =>
-          `[${l.name}](${l.url}) - ${l.description} | $${l.amountRaised.toLocaleString()}/${l.fundingGoal.toLocaleString()} (${l.progress}% funded) | Wallet: ${l.walletAddress || 'N/A'}`
+      ? `\n\nAvailable Fundraisers (always include clickable links):\n${listingsInfo.map((l) =>
+          `[${l.name}](${l.url}) - ${l.description} | $${l.amountRaised.toLocaleString()}/${l.fundingGoal.toLocaleString()} (${l.progress}% funded)`
         ).join('\n')}`
       : '\n\nNo fundraisers are currently available.';
+    
+    // Create wallet address mapping for payment tools (not shown to user)
+    const walletAddressMap: Record<string, string> = {};
+    listingsInfo.forEach(l => {
+      if (l.walletAddress) {
+        walletAddressMap[l.id] = l.walletAddress;
+        walletAddressMap[l.name] = l.walletAddress;
+      }
+    });
 
     // Try to get Locus API key from user session if not provided
     let finalLocusApiKey = locusApiKey;
@@ -93,6 +102,12 @@ export async function POST(request: NextRequest) {
     // If Locus API key is available, use MCP integration with payment tools
     if (finalLocusApiKey) {
       try {
+        // Create wallet address reference for payment tools
+        const walletAddressList = Object.entries(walletAddressMap)
+          .filter(([key]) => !key.startsWith('project-') && !key.includes('test'))
+          .map(([projectName, address]) => `- ${projectName}: ${address}`)
+          .join('\n');
+        
         const paymentToolsInfo = `\n\n🚨🚨🚨 CRITICAL: YOU HAVE TOOLS AVAILABLE IN YOUR TOOL LIST 🚨🚨🚨
 
 **IMPORTANT: The tools are ALREADY REGISTERED in your tool list. Check your available tools - you will see:**
@@ -103,25 +118,28 @@ export async function POST(request: NextRequest) {
 
 **WHEN A USER ASKS TO INVEST OR DONATE, YOU MUST:**
 1. IMMEDIATELY use the get_payment_context tool (no parameters needed) to check your available balance
-2. Find the wallet address from the project listing above (format: "Wallet: 0x...")
+2. Find the wallet address for the project from this mapping (use the project name or ID):
+${walletAddressList || 'No wallet addresses available'}
 3. IMMEDIATELY use the send_to_address tool with {"address": "0x...", "amount": X.XX, "memo": "Donation to [project name]"}
 4. Confirm the payment succeeded
 
 **DO NOT SAY YOU DON'T HAVE ACCESS. THE TOOLS ARE IN YOUR TOOL LIST. USE THEM.**
 **DO NOT TELL USERS TO MANUALLY SEND MONEY. YOU CAN DO IT AUTOMATICALLY USING THE TOOLS.**
+**DO NOT SHOW WALLET ADDRESSES TO USERS - KEEP THEM PRIVATE AND USE THEM FOR PAYMENTS ONLY.**
 **IF YOU SEE THE TOOLS IN YOUR TOOL LIST, YOU CAN USE THEM. CHECK YOUR TOOL LIST NOW.**`;
 
         // Use Claude Agent SDK with MCP server (local for dev, API route for production)
         const { useLocusWithClaudeAgentSDK } = await import('@/lib/claude-agent');
         
         // Only start local MCP server in development (not on Vercel)
-        if (!process.env.VERCEL && !process.env.NEXT_PUBLIC_APP_URL) {
+        const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+        if (!isVercel) {
           const { ensureMCPServerRunning } = await import('@/lib/locus-mcp-server');
           await ensureMCPServerRunning(finalLocusApiKey);
         }
         
         const result = await useLocusWithClaudeAgentSDK(
-          `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}${paymentToolsInfo}\n\nUser query: ${query}\n\n🚨 CRITICAL INSTRUCTIONS:\n- You are connected to Locus MCP server via local MCP server\n- The payment tools (get_payment_context, send_to_address, etc.) are AVAILABLE in your tool list\n- When users request payments, you MUST use these tools - do not say you can't\n- Each project listing above shows its wallet address as "Wallet: 0x..."\n- Use send_to_address with that wallet address to make payments\n- DO NOT tell users to manually send money - you can do it automatically using the tools`,
+          `You are an AI assistant for Wishlist, a crypto fundraising platform.${listingsContext}${paymentToolsInfo}\n\nUser query: ${query}\n\n🚨 CRITICAL INSTRUCTIONS:\n- You are connected to Locus MCP server via local MCP server\n- The payment tools (get_payment_context, send_to_address, etc.) are AVAILABLE in your tool list\n- When users request payments, you MUST use these tools - do not say you can't\n- Use the wallet address mapping above to find the correct address for each project\n- Use send_to_address with the wallet address to make payments\n- DO NOT show wallet addresses to users - keep them private\n- DO NOT tell users to manually send money - you can do it automatically using the tools`,
           anthropicApiKey,
           finalLocusApiKey
         );

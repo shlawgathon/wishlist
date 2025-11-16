@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Wallet, LogOut, User } from 'lucide-react';
+import { Wallet, LogOut, User, Moon, Sun } from 'lucide-react';
 import LoginDialog from './LoginDialog';
 import SignupDialog from './SignupDialog';
+import { useTheme } from './ThemeProvider';
 
 interface User {
   username: string;
@@ -20,6 +21,7 @@ interface WalletBalance {
 }
 
 export default function Header() {
+  const { resolvedTheme, setTheme } = useTheme();
   const [user, setUser] = useState<User | null>(null);
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showSignupDialog, setShowSignupDialog] = useState(false);
@@ -166,6 +168,20 @@ export default function Header() {
           </nav>
 
           <div className="flex flex-1 items-center justify-end space-x-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              className="h-9 w-9 p-0"
+              aria-label="Toggle theme"
+            >
+              {resolvedTheme === 'dark' ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </Button>
+            
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${getStatusColor()} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
               <Badge variant="outline" className="text-xs font-normal">

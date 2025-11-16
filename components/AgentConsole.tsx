@@ -40,6 +40,8 @@ export default function AgentConsole() {
   const [loading, setLoading] = useState(true);
   const isInitialLoadRef = useRef(true);
   const hasSavedOnExitRef = useRef(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const savedChatIdsRef = useRef<Set<string>>(new Set()); // Track which chats have been saved
 
   // Load chat histories from MongoDB
   const loadChatHistories = useCallback(async () => {
@@ -54,6 +56,11 @@ export default function AgentConsole() {
       if (response.ok) {
         const data = await response.json();
         const histories = data.histories || [];
+        
+        // Mark all loaded chats as already saved (they exist in MongoDB)
+        histories.forEach((chat: ChatHistory) => {
+          savedChatIdsRef.current.add(chat.id);
+        });
         
         setChatHistories((prevHistories) => {
           // Only update if histories actually changed
@@ -113,9 +120,102 @@ export default function AgentConsole() {
     return () => clearInterval(interval);
   }, [loadChatHistories]);
 
+  // Save all chats on exit (page unload, navigation, etc.)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMounted) return;
+
+    const saveAllChatsOnExit = async () => {
+      // Clear any pending debounced saves
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+
+      // Save all chats immediately (only once)
+      if (hasSavedOnExitRef.current) return;
+      hasSavedOnExitRef.current = true;
+
+      // Save all chats with messages (updates will sync latest state)
+      const chatsToSave = chatHistories.filter(chat => chat.messages.length > 0);
+      if (chatsToSave.length === 0) return;
+
+      // Save each unsaved chat (check if exists, then create or update)
+      const savePromises = chatsToSave.map(async (chat) => {
+        try {
+          // Check if chat exists
+          const checkResponse = await fetch(`/api/chat/histories/${chat.id}`, {
+            keepalive: true,
+          });
+          
+          if (checkResponse.status === 404) {
+            // Chat doesn't exist, create it
+            const createResponse = await fetch('/api/chat/histories', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(chat),
+              keepalive: true,
+            });
+            if (createResponse.ok) {
+              savedChatIdsRef.current.add(chat.id);
+            }
+          } else if (checkResponse.ok) {
+            // Chat exists, update it
+            const updateResponse = await fetch(`/api/chat/histories/${chat.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: chat.title,
+                messages: chat.messages,
+              }),
+              keepalive: true,
+            });
+            if (updateResponse.ok) {
+              savedChatIdsRef.current.add(chat.id);
+            }
+          }
+        } catch (error) {
+          // Silently fail on exit - we tried our best
+        }
+      });
+
+      await Promise.all(savePromises);
+    };
+
+    // Save on page unload (closing tab/window, navigating away)
+    const handleBeforeUnload = () => {
+      saveAllChatsOnExit();
+    };
+
+    // Save when page becomes hidden (tab switch, minimize, etc.)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveAllChatsOnExit();
+      }
+    };
+
+    // Save on pagehide (more reliable than beforeunload)
+    const handlePageHide = () => {
+      saveAllChatsOnExit();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      // Save on component unmount (navigation within app)
+      saveAllChatsOnExit();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [chatHistories, isMounted]);
+
   const createNewChat = async () => {
+    // Generate a unique ID using timestamp + random string
+    const uniqueId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const newChat: ChatHistory = {
-      id: `chat_${Date.now()}`,
+      id: uniqueId,
       title: 'New Chat',
       messages: [],
       createdAt: Date.now(),
@@ -132,6 +232,8 @@ export default function AgentConsole() {
       if (response.ok) {
         const data = await response.json();
         const createdChat = data.chat;
+        // Mark as saved since it was successfully created in MongoDB
+        savedChatIdsRef.current.add(createdChat.id);
         const updated = [createdChat, ...chatHistories];
         setChatHistories(updated);
         setSelectedChatId(createdChat.id);
@@ -139,14 +241,14 @@ export default function AgentConsole() {
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('Failed to create chat:', response.status, errorData);
-        // Still add to local state even if MongoDB save fails
+        // Still add to local state even if MongoDB save fails (don't mark as saved)
         const updated = [newChat, ...chatHistories];
         setChatHistories(updated);
         setSelectedChatId(newChat.id);
       }
     } catch (error) {
       console.error('Error creating chat:', error);
-      // Still add to local state even if MongoDB save fails
+      // Still add to local state even if MongoDB save fails (don't mark as saved)
       const updated = [newChat, ...chatHistories];
       setChatHistories(updated);
       setSelectedChatId(newChat.id);
@@ -161,6 +263,8 @@ export default function AgentConsole() {
       });
 
       if (response.ok) {
+        // Remove from saved tracking
+        savedChatIdsRef.current.delete(chatId);
         const updated = chatHistories.filter(chat => chat.id !== chatId);
         setChatHistories(updated);
         
@@ -179,8 +283,53 @@ export default function AgentConsole() {
     }
   };
 
+  // Save chat to MongoDB
+  const saveChatToMongoDB = useCallback(async (chat: ChatHistory) => {
+    try {
+      // Check if chat exists in MongoDB
+      const checkResponse = await fetch(`/api/chat/histories/${chat.id}`);
+      if (checkResponse.status === 404) {
+        // Chat doesn't exist, create it (only if not already marked as saved to prevent duplicates)
+        if (savedChatIdsRef.current.has(chat.id)) {
+          return true; // Already saved, skip creation
+        }
+        const createResponse = await fetch('/api/chat/histories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chat),
+        });
+        if (createResponse.ok) {
+          savedChatIdsRef.current.add(chat.id);
+          return true;
+        }
+        return false;
+      } else if (checkResponse.ok) {
+        // Chat exists, update it (always update to sync latest messages)
+        const updateResponse = await fetch(`/api/chat/histories/${chat.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: chat.title,
+            messages: chat.messages,
+          }),
+        });
+        if (updateResponse.ok) {
+          savedChatIdsRef.current.add(chat.id);
+          return true;
+        }
+        return false;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error saving chat to MongoDB:', error);
+      return false;
+    }
+  }, []);
+
   const updateChatMessages = useCallback(async (chatId: string, messages: ChatMessage[]) => {
     // Find the chat to get current title
+    let chatToSave: ChatHistory | null = null;
+    
     setChatHistories(prevHistories => {
       const currentChat = prevHistories.find(chat => chat.id === chatId);
       if (!currentChat) {
@@ -200,22 +349,34 @@ export default function AgentConsole() {
       // Update local state immediately for responsive UI
       const updated = prevHistories.map(chat => {
         if (chat.id === chatId) {
-          return {
+          const updatedChat = {
             ...chat,
             title,
             messages,
             updatedAt: Date.now(),
           };
+          chatToSave = updatedChat;
+          return updatedChat;
         }
         return chat;
       });
 
-      // Don't save to MongoDB on every message change - only save on exit
-      // The chat will be saved when the user leaves the page
-
       return updated;
     });
-  }, []);
+
+    // Save to MongoDB with debouncing (wait 1 second after last change)
+    if (chatToSave) {
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      // Set new timeout to save after 1 second of inactivity
+      saveTimeoutRef.current = setTimeout(() => {
+        saveChatToMongoDB(chatToSave!);
+      }, 1000);
+    }
+  }, [saveChatToMongoDB]);
 
   const selectedChat = chatHistories.find(chat => chat.id === selectedChatId);
 
