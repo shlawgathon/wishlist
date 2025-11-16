@@ -23,12 +23,29 @@ interface ChatHistory {
   updatedAt: number;
 }
 
-// Generate a title from the first user message
-function generateTitle(firstMessage: string): string {
+// Generate a title from the first user message using Claude
+async function generateTitle(firstMessage: string): Promise<string> {
   if (!firstMessage) return 'New Chat';
+  
+  try {
+    const response = await fetch('/api/chat/generate-title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstMessage }),
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.title || 'New Chat';
+    }
+  } catch (error) {
+    console.error('Error generating title with Claude:', error);
+  }
+  
+  // Fallback to simple truncation
   const trimmed = firstMessage.trim();
-  if (trimmed.length > 50) {
-    return trimmed.substring(0, 50) + '...';
+  if (trimmed.length > 20) {
+    return trimmed.substring(0, 20) + '...';
   }
   return trimmed;
 }
@@ -56,6 +73,8 @@ export default function AgentConsole() {
       if (response.ok) {
         const data = await response.json();
         const histories = data.histories || [];
+        
+        console.log(`✅ Loaded ${histories.length} chat histories from MongoDB`);
         
         // Mark all loaded chats as already saved (they exist in MongoDB)
         histories.forEach((chat: ChatHistory) => {
@@ -93,12 +112,13 @@ export default function AgentConsole() {
         });
       } else if (response.status === 401) {
         // Not authenticated - this is a valid state, just set empty array
+        console.log('⚠️ Not authenticated, no chat histories loaded');
         setChatHistories([]);
         setSelectedChatId(null);
       } else {
         // Only log actual errors (500, etc.), not expected states
         const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to load chat histories:', response.status, errorData);
+        console.error('❌ Failed to load chat histories:', response.status, errorData);
       }
     } catch (error) {
       // Only log unexpected network errors
@@ -342,7 +362,24 @@ export default function AgentConsole() {
       if (title === 'New Chat' && messages.length > 0) {
         const firstUserMessage = messages.find(m => m.role === 'user');
         if (firstUserMessage) {
-          title = generateTitle(firstUserMessage.content);
+          // Generate title asynchronously and update when ready
+          generateTitle(firstUserMessage.content).then((generatedTitle) => {
+            setChatHistories(prevHistories => {
+              const updated = prevHistories.map(chat => 
+                chat.id === chatId && chat.title === 'New Chat'
+                  ? { ...chat, title: generatedTitle }
+                  : chat
+              );
+              // Save updated title to MongoDB
+              const updatedChat = updated.find(chat => chat.id === chatId);
+              if (updatedChat) {
+                saveChatToMongoDB(updatedChat);
+              }
+              return updated;
+            });
+          });
+          // Use a temporary title while generating
+          title = firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '');
         }
       }
 
@@ -438,7 +475,7 @@ export default function AgentConsole() {
                     >
                       <div className="flex items-start justify-between gap-2" style={{ minWidth: 0, width: '100%' }}>
                         <div className="flex-1 min-w-0" style={{ minWidth: 0, overflow: 'hidden', maxWidth: 'calc(100% - 32px)' }}>
-                          <p className="font-medium text-sm truncate" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <p className="font-medium text-sm break-words" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>
                             {chat.title}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1 truncate">

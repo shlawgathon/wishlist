@@ -561,10 +561,10 @@ export async function useLocusWithClaudeAgentSDK(
     console.error('Error using Locus MCP with Claude Agent SDK:', error);
     // Try to close client on error if it was initialized
     if (mcpClient) {
-      try {
-        await mcpClient.close();
-      } catch (closeError) {
-        // Ignore close errors
+    try {
+      await mcpClient.close();
+    } catch (closeError) {
+      // Ignore close errors
       }
     }
     throw error;
