@@ -100,6 +100,7 @@ export async function DELETE(
     const user = await getCurrentUser();
     
     if (!user) {
+      console.error('Delete chat: Not authenticated');
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
@@ -107,20 +108,24 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    console.log('Delete chat: Attempting to delete chat', id, 'for user:', user.username);
+    
     const deleted = await deleteChatHistory(id, user.username);
     
     if (!deleted) {
+      console.error('Delete chat: Chat history not found', id, 'for user:', user.username);
       return NextResponse.json(
         { error: 'Chat history not found' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Delete chat: Successfully deleted chat', id, 'for user:', user.username);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete chat history error:', error);
+    console.error('❌ Delete chat history error:', error);
     return NextResponse.json(
-      { error: 'Failed to delete chat history' },
+      { error: 'Failed to delete chat history', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

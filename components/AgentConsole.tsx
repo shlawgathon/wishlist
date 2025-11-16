@@ -295,11 +295,41 @@ export default function AgentConsole() {
             setSelectedChatId(null);
           }
         }
+        console.log('✅ Chat deleted successfully:', chatId);
       } else {
-        console.error('Failed to delete chat');
+        // Get error details from response
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Failed to delete chat:', response.status, errorData);
+        
+        // Still remove from UI optimistically, but log the error
+        // This way the UI stays responsive even if the API call fails
+        savedChatIdsRef.current.delete(chatId);
+        const updated = chatHistories.filter(chat => chat.id !== chatId);
+        setChatHistories(updated);
+        
+        if (selectedChatId === chatId) {
+          if (updated.length > 0) {
+            setSelectedChatId(updated[0].id);
+          } else {
+            setSelectedChatId(null);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error deleting chat:', error);
+      console.error('❌ Error deleting chat:', error);
+      
+      // Still remove from UI optimistically on network errors
+      savedChatIdsRef.current.delete(chatId);
+      const updated = chatHistories.filter(chat => chat.id !== chatId);
+      setChatHistories(updated);
+      
+      if (selectedChatId === chatId) {
+        if (updated.length > 0) {
+          setSelectedChatId(updated[0].id);
+        } else {
+          setSelectedChatId(null);
+        }
+      }
     }
   };
 
@@ -469,13 +499,19 @@ export default function AgentConsole() {
                         width: '100%',
                         maxWidth: '100%',
                         boxSizing: 'border-box',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        minWidth: 0
                       }}
                       onClick={() => setSelectedChatId(chat.id)}
                     >
-                      <div className="flex items-start justify-between gap-2" style={{ minWidth: 0, width: '100%' }}>
-                        <div className="flex-1 min-w-0" style={{ minWidth: 0, overflow: 'hidden', maxWidth: 'calc(100% - 32px)' }}>
-                          <p className="font-medium text-sm break-words" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+                      <div className="flex items-start justify-between gap-2" style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}>
+                        <div className="flex-1 min-w-0 overflow-hidden" style={{ minWidth: 0, maxWidth: '100%' }}>
+                          <p className="font-medium text-sm break-words" style={{ 
+                            wordWrap: 'break-word', 
+                            overflowWrap: 'break-word',
+                            wordBreak: 'break-word',
+                            overflow: 'hidden'
+                          }}>
                             {chat.title}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -489,7 +525,7 @@ export default function AgentConsole() {
                           variant="ghost"
                           size="sm"
                           className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 flex-shrink-0"
-                          style={{ flexShrink: 0, minWidth: '24px' }}
+                          style={{ flexShrink: 0, minWidth: '24px', width: '24px' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteChat(chat.id);
