@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MessageSquare, Share2, Check, Wifi, WifiOff } from 'lucide-react';
+import { MessageSquare, Share2, Check, Wifi, WifiOff, Mail } from 'lucide-react';
 import type { ProjectListing, ProjectTier } from '@/types/project';
 import { useListingUpdates } from '@/hooks/useListingUpdates';
 import ProjectCheckout from './ProjectCheckout';
@@ -40,21 +40,15 @@ export default function ProjectListing({ project: initialProject, onBack, showFu
     setShowCheckout(true);
   };
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: project.name,
-          text: project.description,
-          url: window.location.href,
-        });
-      } catch (error) {
-        console.error('Error sharing:', error);
-      }
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click navigation
+    
+    try {
+      await navigator.clipboard.writeText(window.location.href);
       alert('Link copied to clipboard!');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      alert('Failed to copy link. Please copy manually: ' + window.location.href);
     }
   };
 
@@ -94,9 +88,15 @@ export default function ProjectListing({ project: initialProject, onBack, showFu
                   {project.companyProfile.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold text-sm">{project.companyProfile.name}</p>
                 <p className="text-xs text-muted-foreground">{project.companyProfile.bio}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <Mail className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    {project.sellerEmail || 'None'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -106,7 +106,7 @@ export default function ProjectListing({ project: initialProject, onBack, showFu
             variant="outline"
             size="sm"
             onClick={handleShare}
-            className="gap-2"
+            className="gap-2 no-navigate"
           >
             <Share2 className="h-4 w-4" />
             Share

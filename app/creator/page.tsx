@@ -25,7 +25,7 @@ export default function CreatorDashboard() {
       fundingGoal: '',
       daysLeft: '',
       category: '',
-      sellerEmail: '', // Optional: Email for contacting creator (not for payments)
+      sellerEmail: '', // Required: Contact email for backers to reach creator (not for payments)
       sellerWalletAddress: '', // Required: Wallet address for receiving payments (agents cannot receive)
     });
   const [tiers, setTiers] = useState<Omit<ProjectTier, 'id'>[]>([
@@ -347,43 +347,46 @@ export default function CreatorDashboard() {
                       />
                     </div>
 
-                          <div className="space-y-4">
-                            <div>
-                              <h4 className="text-sm font-semibold mb-3">Payment Methods (at least one required)</h4>
-                              <p className="text-xs text-muted-foreground mb-4">
-                                Choose how you want to receive payments. You can enable multiple methods.
-                              </p>
-                            </div>
+                    {/* Contact Information */}
+                    <div className="space-y-2">
+                      <Label htmlFor="sellerEmail">Contact Email *</Label>
+                      <Input
+                        id="sellerEmail"
+                        type="email"
+                        value={formData.sellerEmail}
+                        onChange={(e) => setFormData({ ...formData, sellerEmail: e.target.value })}
+                        placeholder="seller@example.com"
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Required contact email for backers to reach you. This is not used for payments.
+                      </p>
+                    </div>
 
-                            <div className="space-y-2">
-                              <Label htmlFor="sellerEmail">Email Address (Escrow Payments)</Label>
-                              <Input
-                                id="sellerEmail"
-                                type="email"
-                                value={formData.sellerEmail}
-                                onChange={(e) => setFormData({ ...formData, sellerEmail: e.target.value })}
-                                placeholder="seller@example.com"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Enables escrow payments via email. Recipient will receive payment instructions.
-                              </p>
-                            </div>
+                    {/* Payment Methods */}
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">Payment Method</h4>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          Wallet address for receiving payments. Required.
+                        </p>
+                      </div>
 
-                            <div className="space-y-2">
-                              <Label htmlFor="sellerWalletAddress">Wallet Address (Direct Transfers)</Label>
-                              <Input
-                                id="sellerWalletAddress"
-                                type="text"
-                                value={formData.sellerWalletAddress}
-                                onChange={(e) => setFormData({ ...formData, sellerWalletAddress: e.target.value })}
-                                placeholder="0x..."
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Required: Wallet address for receiving payments. Agents cannot receive payments, only wallets can.
-                              </p>
-                            </div>
-
-                          </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="sellerWalletAddress">Wallet Address *</Label>
+                        <Input
+                          id="sellerWalletAddress"
+                          type="text"
+                          value={formData.sellerWalletAddress}
+                          onChange={(e) => setFormData({ ...formData, sellerWalletAddress: e.target.value })}
+                          placeholder="0x..."
+                          required
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Wallet address for receiving payments. Agents cannot receive payments, only wallets can.
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Company Profile */}

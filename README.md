@@ -1,19 +1,19 @@
 # Wishlist - AI-Powered Crypto Fundraising Platform
 
-AI-powered crypto fundraising platform with autonomous investment matching using Claude Agent SDK, Locus payment agent, x402 protocol, and CDP wallets.
+AI-powered crypto fundraising platform with autonomous investment matching using Claude Agent SDK, Locus payment agent, x402 protocol, and CDP wallets. Coinbase Payment WIP.
 
 **🌐 Live Demo**: https://wishlist-two-rho.vercel.app
 
 ## Features
 
-- **Creator Dashboard**: Create projects, set funding goals, and track progress in real-time
-- **AI Investment Matching**: Claude agent analyzes projects and matches them to backer preferences
-- **Autonomous Payments**: Locus agent orchestrates payments through x402 protocol automatically
-- **CDP Wallets**: Secure embedded wallets for creators and backers with seamless integration
-- **Real-time Updates**: Track funding progress and investment history with live updates via Locus
-- **Semantic Search**: Voyage AI generates vector embeddings for intelligent project discovery beyond keywords
-- **MongoDB Atlas**: Cloud-hosted database with vector search indexes for fast similarity matching
-- **Vector Embeddings**: 1536-dimensional embeddings capture semantic meaning for accurate recommendations
+- **Creator Dashboard**: Create projects, set funding goals, track progress
+- **AI Investment Matching**: Claude agent analyzes and matches projects to backer preferences
+- **Autonomous Payments**: Locus agent orchestrates payments through x402 protocol
+- **CDP Wallets**: Secure embedded wallets for creators and backers
+- **Real-time Updates**: Track funding progress and investment history, live updates via Locus
+- **Semantic Search with Vector Embeddings**: Uses Voyage AI to generate vector embeddings for project descriptions, enabling semantic search that understands meaning and context rather than just keywords. Projects are stored in MongoDB Atlas with vector indexes for fast similarity searches.
+- **MongoDB Atlas**: Cloud-hosted database with vector search capabilities. Stores project listings, chat histories, and user data with automatic scaling and high availability. Vector indexes enable semantic search across project descriptions.
+- **Voyage AI Embeddings**: Generates high-quality vector embeddings (1536-dimensional) for project descriptions and user queries. These embeddings capture semantic meaning, allowing the platform to find relevant projects even when exact keywords don't match, improving discovery and recommendation accuracy.
 
 ## Tech Stack
 
@@ -35,7 +35,7 @@ AI-powered crypto fundraising platform with autonomous investment matching using
   - Locus (Wallet Agent and Seller API Keys - Required for payments)
   - x402 Bazaar endpoint
 
-### Installation
+### Building
 
 1. Clone the repository:
 
@@ -168,59 +168,6 @@ npm start
 
 ```bash
 npm run lint
-```
-
-## MVP Notes
-
-This is an MVP implementation. In production, you would:
-
-- Replace in-memory storage with a database
-- Integrate real CDP Server Wallet API v2
-- Connect to actual x402 Bazaar endpoint
-- Implement real blockchain transactions
-- Add authentication and user management
-- Enhance error handling and validation
-- Add comprehensive testing
-
-## Deployment
-
-**🌐 Live Demo**: [https://wishlist-oo8z2560c-locus-hackathon.vercel.app](https://wishlist-oo8z2560c-locus-hackathon.vercel.app)
-
-### Deploy to Vercel
-
-1. **Push to Git**: Ensure your code is committed and pushed to GitHub/GitLab/Bitbucket
-2. **Connect to Vercel**:
-
-   - Go to https://vercel.com/new
-   - Import your repository
-   - Vercel will auto-detect Next.js
-3. **Set Environment Variables** in Vercel dashboard (Settings → Environment Variables):
-
-   - `MONGODB_URI` - Your MongoDB connection string
-   - `ANTHROPIC_API_KEY` - Claude AI API key
-   - `LOCUS_BUYER_API_KEY` - Locus Wallet Agent API key (when creating an agent in your wallet, make sure to select "Create API Key" so it can buy stuff)
-   - `LOCUS_SELLER_API_KEY` - Locus seller API key
-   - `X402_BAZAAR_ENDPOINT` - x402 Bazaar endpoint
-   - `NEXT_PUBLIC_APP_URL` - Your Vercel app URL (auto-set)
-   - `VOYAGE_API_KEY` - (Optional) Voyage AI for semantic search
-   - `CDP_API_KEY_NAME` - Coinbase CDP API key name (format: "organizations/{org_id}/apiKeys/{key_id}") - Required for Coinbase Pay
-   - `CDP_API_KEY_PRIVATE_KEY` - Coinbase CDP API private key (EC private key in PEM format, must use ECDSA/ES256, NOT Ed25519) - Required for Coinbase Pay
-   - `NETWORK` - Blockchain network (default: `base`)
-   - `BASE_RPC_URL` - Base RPC endpoint
-   - `AUTH_SALT` - Random string for password hashing
-4. **Deploy**: Click "Deploy" or push a new commit
-
-See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed deployment instructions.
-
-### Quick Deploy via CLI
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Login and deploy
-vercel login
-vercel --prod
 ```
 
 ## License

@@ -39,18 +39,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Wallet address is required for receiving payments (agents cannot receive)
-    if (!sellerWalletAddress) {
+    // Email is required
+    if (!sellerEmail) {
       return NextResponse.json(
-        { error: 'Seller wallet address is required. Agents cannot receive payments, only wallets can.' },
+        { error: 'Email address is required' },
         { status: 400 }
       );
     }
 
-    // Validate email format if provided
-    if (sellerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sellerEmail)) {
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sellerEmail)) {
       return NextResponse.json(
         { error: 'Invalid email format' },
+        { status: 400 }
+      );
+    }
+
+    // Wallet address is required for receiving payments (agents cannot receive)
+    if (!sellerWalletAddress) {
+      return NextResponse.json(
+        { error: 'Seller wallet address is required. Agents cannot receive payments, only wallets can.' },
         { status: 400 }
       );
     }
