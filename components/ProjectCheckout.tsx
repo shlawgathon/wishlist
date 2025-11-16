@@ -261,27 +261,21 @@ export default function ProjectCheckout({
                 </div>
               </div>
 
-              {/* Coinbase Pay Button */}
-              <Button
-                onClick={handleCoinbasePay}
-                disabled={coinbaseLoading || parseFloat(customAmount || '0') < tier.amount}
-                className="w-full gap-2 bg-[#0052FF] hover:bg-[#0040CC] text-white"
-                size="lg"
-              >
-                {coinbaseLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28H9.085l1.97-9.28h7.838z"/>
-                    </svg>
-                    Pay with Coinbase
-                  </>
-                )}
-              </Button>
+              {/* Coinbase Pay Button - WIP */}
+              <div className="relative">
+                <Button
+                  onClick={handleCoinbasePay}
+                  disabled={true}
+                  className="w-full gap-2 bg-muted text-muted-foreground hover:bg-muted cursor-not-allowed opacity-50"
+                  size="lg"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28H9.085l1.97-9.28h7.838z"/>
+                  </svg>
+                  Pay with Coinbase
+                  <span className="ml-2 text-xs bg-muted-foreground/20 px-2 py-0.5 rounded">WIP</span>
+                </Button>
+              </div>
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -314,7 +308,7 @@ export default function ProjectCheckout({
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                Payment will be processed securely using Locus or Coinbase
+                Payment will be processed securely using Locus
               </p>
             </>
           )}

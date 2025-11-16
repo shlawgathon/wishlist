@@ -30,16 +30,25 @@ export default function ProjectComments({ projectId, fullView = false }: Project
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: newComment,
-          author: 'Anonymous', // In production, get from auth
         }),
       });
 
       if (response.ok) {
         setNewComment('');
         // Comments will update automatically via SSE
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to post comment' }));
+        if (response.status === 401) {
+          alert('Please log in to post a comment');
+        } else if (response.status === 409) {
+          alert('You have already commented on this listing');
+        } else {
+          alert(errorData.error || 'Failed to post comment');
+        }
       }
     } catch (error) {
       console.error('Error posting comment:', error);
+      alert('Failed to post comment. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -81,16 +90,21 @@ export default function ProjectComments({ projectId, fullView = false }: Project
       {fullView && (
         <>
           <Separator />
-          <form onSubmit={handleSubmitComment} className="space-y-2">
+          <form onSubmit={handleSubmitComment} className="flex gap-2">
             <Input
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Write a comment..."
               disabled={loading}
+              className="flex-1"
             />
-            <Button type="submit" size="sm" disabled={loading || !newComment.trim()} className="gap-2">
+            <Button 
+              type="submit" 
+              size="icon" 
+              disabled={loading || !newComment.trim()}
+              className="flex-shrink-0"
+            >
               <Send className="h-4 w-4" />
-              Post Comment
             </Button>
           </form>
         </>

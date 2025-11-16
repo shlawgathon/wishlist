@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth';
 import { getComments, addComment, type Comment } from '@/lib/listings-store';
 
 export async function GET(
@@ -25,21 +26,43 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
     const body = await request.json();
-    const { content, author } = body;
+    const { content } = body;
 
-    if (!content || !author) {
+    if (!content) {
       return NextResponse.json(
-        { error: 'Missing required fields: content, author' },
+        { error: 'Missing required field: content' },
         { status: 400 }
+      );
+    }
+
+    // Check if user already has a comment on this listing
+    const existingComments = await getComments(id);
+    const userHasComment = existingComments.some(
+      comment => comment.author === user.username
+    );
+
+    if (userHasComment) {
+      return NextResponse.json(
+        { error: 'You have already commented on this listing' },
+        { status: 409 }
       );
     }
 
     const comment: Comment = {
       id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       listingId: id,
-      author,
+      author: user.username,
       content,
       timestamp: Date.now(),
     };

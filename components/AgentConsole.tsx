@@ -333,6 +333,44 @@ export default function AgentConsole() {
     }
   };
 
+  const deleteAllChats = async () => {
+    if (chatHistories.length === 0) return;
+    
+    // Confirm before deleting all
+    if (!confirm(`Are you sure you want to delete all ${chatHistories.length} chat${chatHistories.length === 1 ? '' : 's'}? This action cannot be undone.`)) {
+      return;
+    }
+
+    // Delete all chats in parallel
+    const deletePromises = chatHistories.map(chat => 
+      fetch(`/api/chat/histories/${chat.id}`, {
+        method: 'DELETE',
+      })
+    );
+
+    try {
+      const responses = await Promise.all(deletePromises);
+      const successCount = responses.filter(r => r.ok).length;
+      
+      // Clear all chats from UI
+      savedChatIdsRef.current.clear();
+      setChatHistories([]);
+      setSelectedChatId(null);
+      
+      if (successCount === chatHistories.length) {
+        console.log(`✅ Successfully deleted all ${successCount} chats`);
+      } else {
+        console.warn(`⚠️ Deleted ${successCount} of ${chatHistories.length} chats`);
+      }
+    } catch (error) {
+      console.error('❌ Error deleting all chats:', error);
+      // Still clear UI optimistically
+      savedChatIdsRef.current.clear();
+      setChatHistories([]);
+      setSelectedChatId(null);
+    }
+  };
+
   // Save chat to MongoDB
   const saveChatToMongoDB = useCallback(async (chat: ChatHistory) => {
     try {
@@ -461,22 +499,35 @@ export default function AgentConsole() {
               <MessageSquare className="h-5 w-5" />
               Chat Histories
             </CardTitle>
-            <Button
-              onClick={createNewChat}
-              size="sm"
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              New
-            </Button>
+            <div className="flex items-center gap-2">
+              {chatHistories.length > 0 && (
+                <Button
+                  onClick={deleteAllChats}
+                  size="sm"
+                  variant="ghost"
+                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  title="Delete all chats"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                onClick={createNewChat}
+                size="sm"
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                New
+              </Button>
+            </div>
           </div>
           <CardDescription>
             {chatHistories.length} {chatHistories.length === 1 ? 'chat' : 'chats'}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 overflow-hidden p-0 relative">
-          <ScrollArea className="absolute inset-0">
-            <div className="p-4 space-y-2" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+        <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
+          <ScrollArea className="h-full" style={{ height: '100%' }}>
+            <div className="p-4 space-y-2">
               {chatHistories.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />

@@ -6,14 +6,14 @@ AI-powered crypto fundraising platform with autonomous investment matching using
 
 ## Features
 
-- **Creator Dashboard**: Create projects, set funding goals, track progress
-- **AI Investment Matching**: Claude agent analyzes and matches projects to backer preferences
-- **Autonomous Payments**: Locus agent orchestrates payments through x402 protocol
-- **CDP Wallets**: Secure embedded wallets for creators and backers
-- **Real-time Updates**: Track funding progress and investment history, live updates via Locus
-- **Semantic Search with Vector Embeddings**: Uses Voyage AI to generate vector embeddings for project descriptions, enabling semantic search that understands meaning and context rather than just keywords. Projects are stored in MongoDB Atlas with vector indexes for fast similarity searches.
-- **MongoDB Atlas**: Cloud-hosted database with vector search capabilities. Stores project listings, chat histories, and user data with automatic scaling and high availability. Vector indexes enable semantic search across project descriptions.
-- **Voyage AI Embeddings**: Generates high-quality vector embeddings (1536-dimensional) for project descriptions and user queries. These embeddings capture semantic meaning, allowing the platform to find relevant projects even when exact keywords don't match, improving discovery and recommendation accuracy.
+- **Creator Dashboard**: Create projects, set funding goals, and track progress in real-time
+- **AI Investment Matching**: Claude agent analyzes projects and matches them to backer preferences
+- **Autonomous Payments**: Locus agent orchestrates payments through x402 protocol automatically
+- **CDP Wallets**: Secure embedded wallets for creators and backers with seamless integration
+- **Real-time Updates**: Track funding progress and investment history with live updates via Locus
+- **Semantic Search**: Voyage AI generates vector embeddings for intelligent project discovery beyond keywords
+- **MongoDB Atlas**: Cloud-hosted database with vector search indexes for fast similarity matching
+- **Vector Embeddings**: 1536-dimensional embeddings capture semantic meaning for accurate recommendations
 
 ## Tech Stack
 
