@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "Wishlist - AI-Powered Crypto Fundraising",
@@ -40,6 +41,7 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="system" storageKey="wishlist-theme">
           {children}
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
